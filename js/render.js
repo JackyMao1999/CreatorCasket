@@ -168,10 +168,19 @@ class Renderer {
           if (zRight !== z) ctx.fillRect((x + 1) * TILE - 1, y * TILE, 1, TILE);
           ctx.globalAlpha = 1;
         }
-        // 道路
+        // 道路(水中则绘制木桥)
         if (w.road[i]) {
-          ctx.fillStyle = '#9a7b50'; ctx.fillRect(x * TILE + 1, y * TILE + 1, TILE - 2, TILE - 2);
-          ctx.fillStyle = '#b08d5c'; ctx.fillRect(x * TILE + 2, y * TILE + 2, TILE - 4, TILE - 4);
+          if (isWaterT(w.tiles[i])) {
+            ctx.fillStyle = '#8b6b4a'; ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+            ctx.fillStyle = '#a08060';
+            for (let r = 0; r < TILE; r += 2) ctx.fillRect(x * TILE + 1, y * TILE + r, TILE - 2, 1);
+            ctx.fillStyle = '#6a4f3a';
+            ctx.fillRect(x * TILE, y * TILE, TILE, 1);
+            ctx.fillRect(x * TILE, y * TILE + TILE - 1, TILE, 1);
+          } else {
+            ctx.fillStyle = '#9a7b50'; ctx.fillRect(x * TILE + 1, y * TILE + 1, TILE - 2, TILE - 2);
+            ctx.fillStyle = '#b08d5c'; ctx.fillRect(x * TILE + 2, y * TILE + 2, TILE - 4, TILE - 4);
+          }
         }
         // 农田
         const f = w.farm[i];

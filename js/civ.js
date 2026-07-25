@@ -129,7 +129,20 @@ class Unit {
     }
   }
 
-  /* 向目标移动, 避开水域/火焰/高山 */
+  /* 向目标移动, 文明单位可游泳过河/海, 桥上全速 */
+  _traverseSpeed(game, x, y) {
+    const w = game.world;
+    if (!w.inB(x | 0, y | 0)) return 0;
+    const i = w.idx(x | 0, y | 0);
+    const t = w.tiles[i];
+    if (t === T.LAVA) return 0;
+    if (w.road[i]) return 1;             // 木桥: 全速通行
+    if (passableT(t) && !w.fire[i]) return 1;
+    if (!this.def.civ) return 0;          // 动物不能游泳
+    if (t === T.SHALLOW) return 0.45;     // 浅海游泳
+    if (t === T.DEEP) return 0.22;       // 深海游泳
+    return 0;
+  }
   moveToward(game, tx, ty, speedMul) {
     const w = game.world;
     let dx = tx - this.x, dy = ty - this.y;
@@ -137,15 +150,19 @@ class Unit {
     if (dist < 0.05) return true;
     const sp = this.def.speed * (speedMul || 1) * (this.bless > 0 ? 1.4 : 1) * (this.adult ? 1 : 0.6);
     dx /= dist; dy /= dist;
-    // 尝试直行, 被挡则尝试偏转
+    const baseDir = Math.atan2(dy, dx);
     for (const ang of [0, 0.7, -0.7, 1.4, -1.4, Math.PI / 2, -Math.PI / 2]) {
-      const a = Math.atan2(dy, dx) + ang;
-      const nx = this.x + Math.cos(a) * sp, ny = this.y + Math.sin(a) * sp;
-      const t = w.get(nx | 0, ny | 0);
-      const i = w.inB(nx | 0, ny | 0) ? w.idx(nx | 0, ny | 0) : -1;
-      if (passableT(t) && (i < 0 || !w.fire[i])) {
-        this.x = nx; this.y = ny;
-        return dist <= sp;
+      const a = baseDir + ang;
+      const cx = Math.cos(a), cy = Math.sin(a);
+      const nx = this.x + cx * sp, ny = this.y + cy * sp;
+      const tm = this._traverseSpeed(game, nx, ny);
+      if (tm > 0) {
+        const ms = sp * tm;
+        this.x += cx * ms; this.y += cy * ms;
+        if (tm < 1 && Math.random() < 0.5) game.addParticle(
+          this.x + (Math.random() - .5) * .4, this.y + .35,
+          (Math.random() - .5) * .04, -0.04, 18, '#a0d8f0', 1.3);
+        return dist <= ms;
       }
     }
     return false;
@@ -196,6 +213,8 @@ class Unit {
     const tt = w.tiles[ti];
     if (tt === T.LAVA) { this.damage(game, 2); if (this.dead) return; }
     else if (w.fire[ti]) { this.damage(game, 0.5); if (this.dead) return; }
+    // 深海溺水 (文明单位游泳中, 桥上不会溺水)
+    else if (tt === T.DEEP && this.def.civ && !w.road[ti] && Math.random() < 0.25) { this.hp -= 0.015; }
     // --- 寿命 ---
     if (this.years > this.def.lifespan && Math.random() < 0.002) { this.kill(game); return; }
     // 缓慢回血
@@ -605,7 +624,8 @@ function layRoad(game, x0, y0, x1, y1) {
   let guard = 200;
   while ((x !== x1 || y !== y1) && guard-- > 0) {
     const i = w.idx(x, y);
-    if (passableT(w.tiles[i]) && !w.farm[i]) { w.road[i] = 1; }
+    // 陆地和浅海(木桥)可铺路, 避开农田/熔岩/深海
+    if ((passableT(w.tiles[i]) || w.tiles[i] === T.SHALLOW) && !w.farm[i] && w.tiles[i] !== T.LAVA) { w.road[i] = 1; }
     if (x < x1) x++; else if (x > x1) x--;
     else if (y < y1) y++; else if (y > y1) y--;
     else break;

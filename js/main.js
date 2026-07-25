@@ -368,6 +368,16 @@ window.addEventListener('load', () => {
       Game.cam.x = Game.villages[0].cx;
       Game.cam.y = Game.villages[0].cy;
     }
+    // 可视化桥测试: &bridge 在浅海上画演示桥
+    if (location.search.includes('bridge')) {
+      const w = Game.world;
+      for (let x = 10; x < 50; x++) { w.set(x, 20, T.SHALLOW); w.set(x, 21, T.SHALLOW); w.set(x, 22, T.SHALLOW); }
+      for (let y = 10; y < 35; y++) { w.set(30, y, T.SHALLOW); w.set(31, y, T.SHALLOW); }
+      layRoad(Game, 5, 21, 55, 21);
+      layRoad(Game, 30, 5, 30, 40);
+      w.set(20, 21, T.DEEP); w.set(21, 21, T.DEEP); w.set(22, 21, T.DEEP); // 中间3格深海,桥会断
+      Game.cam.x = 30; Game.cam.y = 22; Game.cam.zoom = 4;
+    }
     const d = document.createElement('div');
     d.style.cssText = 'position:absolute;top:50px;left:10px;z-index:99;background:#000;color:#0f0;font-size:18px;padding:6px;';
     document.body.appendChild(d);
