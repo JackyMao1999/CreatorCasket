@@ -151,7 +151,8 @@ class UI {
         <div class="row"><span class="k">年龄</span><span>${obj.years} 岁</span></div>
         <div class="row"><span class="k">生命</span><span>${Math.ceil(obj.hp)}/${obj.maxHp}</span></div>
         <div class="bar"><div style="width:${Math.max(0, obj.hp / obj.maxHp * 100)}%"></div></div>
-        ${def.civ ? `<div class="row"><span class="k">职业</span><span>${jobName}</span></div>` : ''}
+        ${def.civ ? `<div class="row"><span class="k">职业</span><span>${jobName}</span></div>
+        <div class="row"><span class="k">武器</span><span>${WEAPONS[obj.weapon]?.name || '—'}</span></div>` : ''}
         ${k ? `<div class="row"><span class="k">王国</span><span style="color:${k.color}">${k.name}</span></div>` : ''}
         ${v ? `<div class="row"><span class="k">村庄</span><span>${v.name}</span></div>` : ''}
         ${obj.bless > 0 ? '<div style="color:#ffe070">✨ 受到祝福</div>' : ''}

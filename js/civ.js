@@ -3,16 +3,25 @@
 
 /* ---------- 种族定义 ---------- */
 const RACES = {
-  human:   { name: '人类', icon: '🧑', hp: 60,  dmg: 7,  speed: 0.055, civ: true, lifespan: 70,  skin: '#f0c8a0', cloth: true },
-  elf:     { name: '精灵', icon: '🧝', hp: 50,  dmg: 9,  speed: 0.07,  civ: true, lifespan: 400, skin: '#f5e0c0', cloth: true },
-  orc:     { name: '兽人', icon: '👹', hp: 90,  dmg: 10, speed: 0.05,  civ: true, lifespan: 55,  skin: '#6fae4e', cloth: true },
-  dwarf:   { name: '矮人', icon: '🧔', hp: 100, dmg: 9,  speed: 0.042, civ: true, lifespan: 250, skin: '#e8b088', cloth: true },
+  human:   { name: '人类', icon: '🧑', hp: 60,  dmg: 7,  speed: 0.055, civ: true, lifespan: 70,  skin: '#f0c8a0', cloth: true, weapon: 'sword' },
+  elf:     { name: '精灵', icon: '🧝', hp: 50,  dmg: 9,  speed: 0.07,  civ: true, lifespan: 400, skin: '#f5e0c0', cloth: true, weapon: 'bow' },
+  orc:     { name: '兽人', icon: '👹', hp: 90,  dmg: 10, speed: 0.05,  civ: true, lifespan: 55,  skin: '#6fae4e', cloth: true, weapon: 'axe' },
+  dwarf:   { name: '矮人', icon: '🧔', hp: 100, dmg: 9,  speed: 0.042, civ: true, lifespan: 250, skin: '#e8b088', cloth: true, weapon: 'hammer' },
   sheep:   { name: '羊',   icon: '🐑', hp: 20,  dmg: 1,  speed: 0.045, civ: false, lifespan: 15,  skin: '#eeeeee' },
   chicken: { name: '鸡',   icon: '🐔', hp: 8,   dmg: 1,  speed: 0.06,  civ: false, lifespan: 8,   skin: '#f8f0d8' },
   cow:     { name: '牛',   icon: '🐄', hp: 35,  dmg: 2,  speed: 0.04,  civ: false, lifespan: 20,  skin: '#c09060' },
   wolf:    { name: '狼',   icon: '🐺', hp: 40,  dmg: 6,  speed: 0.085, civ: false, lifespan: 14,  skin: '#8a8f9a' },
 };
 const CIV_RACES = ['human', 'elf', 'orc', 'dwarf'];
+
+/* 武器系统 */
+const WEAPONS = {
+  sword:  { name: '🗡️ 剑', dmgMul: 1.0, cd: 22, range: 1.3,  trait: '均衡攻速' },
+  bow:    { name: '🏹 弓', dmgMul: 0.8, cd: 16, range: 3.0,  trait: '远程狙击' },
+  axe:    { name: '🪓 斧', dmgMul: 1.4, cd: 28, range: 1.3,  trait: '高伤溅射+嗜血(+20%半血下)' },
+  hammer: { name: '🔨 锤', dmgMul: 1.2, cd: 30, range: 1.3,  trait: '建筑破坏2×' },
+};
+
 const KINGDOM_COLORS = ['#e14b4b', '#4b8ae1', '#4be17a', '#e1a84b', '#b44be1', '#4bd8e1', '#e14b9a', '#8ae14b', '#e16a4b', '#7a4be1'];
 
 /* ---------- 名称生成 ---------- */
@@ -116,9 +125,10 @@ class Unit {
     this.tx = x; this.ty = y;   // 移动目标
     this.atkCd = 0;
     this.wanderCd = 0;
-    this.spawnCd = 60;          // 出生后过多久可以建村
+    this.spawnCd = 60;          // 出生后过多久可建村
     this.bless = 0;             // 祝福剩余
     this.plague = 0;            // 瘟疫剩余
+    this.weapon = def.weapon || null;
     this.name = NameGen.unit(race);
     this.dead = false;
   }
@@ -292,14 +302,30 @@ class Unit {
     if (!atWar && this.job === 'warrior') this.job = 'none';
 
     if (enemy) {
+      const wpn = WEAPONS[this.weapon] || WEAPONS.sword;
+      const range2 = wpn.range * wpn.range;
       if (this.job === 'warrior' || (this.adult && ed < 4 && this.race === 'orc')) {
-        if (ed < 1.44) { // 1.2^2
+        if (ed < range2) {
           if (this.atkCd <= 0) {
-            this.atkCd = 22;
-            const dmg = this.def.dmg * (this.bless > 0 ? 1.6 : 1) * (0.7 + Math.random() * 0.6);
+            this.atkCd = wpn.cd;
+            let dmg = this.def.dmg * wpn.dmgMul * (this.bless > 0 ? 1.6 : 1) * (0.7 + Math.random() * 0.6);
+            // 兽人嗜血: HP < 50% 时 +20% 伤害
+            if (this.race === 'orc' && this.hp < this.maxHp * 0.5) dmg *= 1.2;
             enemy.damage(game, dmg, this);
+            // 斧溅射
+            if (this.weapon === 'axe') {
+              forEachNear(game, enemy.x, enemy.y, 1.3, (o) => {
+                if (o !== enemy && o !== this && !o.dead && isHostile(game, this, o)) o.damage(game, dmg * 0.4, this);
+              });
+            }
           }
-        } else this.moveToward(game, enemy.x, enemy.y, 1.25);
+          // 弓箭手原地射击, 不退也不近身
+          if (this.weapon === 'bow') return;
+        } else if (this.weapon !== 'bow') {
+          this.moveToward(game, enemy.x, enemy.y, 1.25);
+        }
+        // 弓手仅在太远时前进一段
+        if (this.weapon === 'bow' && ed > 16) this.moveToward(game, enemy.x, enemy.y, 1.25);
         return;
       }
       // 平民逃跑
@@ -351,8 +377,9 @@ class Unit {
         // 攻击建筑
         const b = nearestBuilding(targetV, this.x, this.y, 2.5);
         if (b && this.atkCd <= 0) {
-          this.atkCd = 25;
-          damageBuilding(game, b, this.def.dmg * 1.5);
+          const wpn = WEAPONS[this.weapon] || WEAPONS.sword;
+          this.atkCd = wpn.cd;
+          damageBuilding(game, b, this.def.dmg * (this.weapon === 'hammer' ? 3.0 : 1.5));
           return;
         }
         if (b) { this.moveToward(game, b.x, b.y, 1.1); return; }

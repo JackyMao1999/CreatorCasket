@@ -225,9 +225,10 @@ class Renderer {
       ctx.fillStyle = '#333';
       ctx.fillRect(3, 5, 1, 2); ctx.fillRect(4, 5, 1, 2);
       if (!adult) ctx.clearRect(2, 6, 4, 2), ctx.fillStyle = '#333', ctx.fillRect(3, 5, 1, 1), ctx.fillRect(4, 5, 1, 1);
-      // 战士的长矛
+      // 战士的武器像素
       if (u.job === 'warrior') {
-        ctx.fillStyle = '#c8c8c8';
+        const wcol = { sword: '#c8c8c8', bow: '#e8a040', axe: '#e04848', hammer: '#b09060' }[u.weapon] || '#c8c8c8';
+        ctx.fillStyle = wcol;
         ctx.fillRect(6, 1, 1, 5);
       }
     } else {
