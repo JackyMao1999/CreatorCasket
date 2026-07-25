@@ -205,6 +205,59 @@ class UI {
   }
 
   /* ---------- 事件记录 & 势力列表 & 设置 ---------- */
+  makeDraggable(handle, target, saveKey) {
+    let down = false, sx = 0, sy = 0, tx = 0, ty = 0, moved = false;
+    const onStart = (e) => {
+      if (e.target.closest('button, input, select, tr, td')) return;
+      e.preventDefault();
+      down = true; moved = false;
+      const r = target.getBoundingClientRect();
+      const ev = e.touches ? e.touches[0] : e;
+      sx = ev.clientX; sy = ev.clientY;
+      tx = r.left; ty = r.top;
+      if (getComputedStyle(target).position === 'static' || !target.style.position) {
+        target.style.position = 'fixed';
+        target.style.left = tx + 'px';
+        target.style.top = ty + 'px';
+        target.style.margin = '0';
+      }
+    };
+    const onMove = (e) => {
+      if (!down) return;
+      const ev = e.touches ? e.touches[0] : e;
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
+      if (!moved) return;
+      let nx = tx + dx, ny = ty + dy;
+      nx = Math.max(-target.offsetWidth + 50, Math.min(window.innerWidth - 50, nx));
+      ny = Math.max(0, Math.min(window.innerHeight - 35, ny));
+      target.style.left = nx + 'px';
+      target.style.top = ny + 'px';
+    };
+    const onEnd = () => {
+      if (!down) return;
+      down = false;
+      if (moved && saveKey) {
+        localStorage.setItem(saveKey, JSON.stringify({ x: parseFloat(target.style.left), y: parseFloat(target.style.top) }));
+      }
+    };
+    handle.addEventListener('mousedown', onStart);
+    handle.addEventListener('touchstart', onStart, { passive: false });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchend', onEnd);
+
+    // 恢复上次位置
+    if (saveKey) {
+      const saved = localStorage.getItem(saveKey);
+      if (saved) try {
+        const pos = JSON.parse(saved);
+        target.style.position = 'fixed'; target.style.left = pos.x + 'px'; target.style.top = pos.y + 'px'; target.style.margin = '0';
+      } catch (e) { /* ignore */ }
+    }
+  }
+
   bindPanels() {
     const hotkeys = (e) => {
       if (e.target.tagName === 'INPUT') return;
@@ -224,6 +277,23 @@ class UI {
     this.$('settings-modal').onclick = (e) => {
       if (e.target === this.$('settings-modal')) this.closeSettings();
     };
+
+    // 拖动支持
+    this.makeDraggable(
+      this.$('event-log').querySelector('.panel-head'),
+      this.$('event-log'),
+      'wb_pos_events'
+    );
+    this.makeDraggable(
+      this.$('faction-panel').querySelector('.panel-head'),
+      this.$('faction-panel'),
+      'wb_pos_factions'
+    );
+    this.makeDraggable(
+      this.$('settings-modal').querySelector('.modal-box h2'),
+      this.$('settings-modal').querySelector('.modal-box'),
+      'wb_pos_settings'
+    );
 
     // 势力列表点击跳转
     this.$('faction-body').addEventListener('click', (e) => {
@@ -312,6 +382,17 @@ class UI {
     this.$('set-vnames').checked = s.showVillageNames !== false;
     this.$('set-particles').checked = s.showParticles !== false;
     this.$('set-autopause').checked = !!s.autoPauseEvents;
+    // 定位弹窗: 有记忆位置则恢复, 否则居中
+    const box = this.$('settings-modal').querySelector('.modal-box');
+    const saved = localStorage.getItem('wb_pos_settings');
+    if (saved) try {
+      const pos = JSON.parse(saved);
+      box.style.position = 'fixed'; box.style.left = pos.x + 'px'; box.style.top = pos.y + 'px'; box.style.margin = '0';
+    } catch (e) {
+      box.removeAttribute('style');
+    } else {
+      box.removeAttribute('style');
+    }
     this.$('settings-modal').classList.remove('hidden');
   }
 
