@@ -141,7 +141,7 @@ const Game = {
         })),
         kingdoms: this.kingdoms.map(k => ({
           id: k.id, name: k.name, race: k.race, color: k.color,
-          villages: k.villages, wars: [...k.wars],
+          villages: k.villages, wars: [...k.wars], allies: [...k.allies],
         })),
         cam: this.cam,
         events: this.events.slice(0, 80),
@@ -178,6 +178,7 @@ const Game = {
         const nk = new Kingdom(k.race);
         Object.assign(nk, k);
         nk.wars = new Set(k.wars);
+        nk.allies = new Set(k.allies || []);
         return nk;
       });
       this.villages = d.villages.map(v => {

@@ -362,13 +362,18 @@ class UI {
       const pop = vills.reduce((s, v) => s + v.pop, 0);
       const race = RACES[k.race];
       const war = k.wars.size > 0;
+      const allied = k.allies.size > 0;
+      let stateIcon = '☮️';
+      if (war && allied) stateIcon = '⚔️🤝';
+      else if (war) stateIcon = '⚔️';
+      else if (allied) stateIcon = '🤝';
       const jumpV = vills[0];
       return `<tr class="${war ? 'war-row' : ''}" data-cx="${jumpV ? jumpV.cx : ''}" data-cy="${jumpV ? jumpV.cy : ''}">
         <td style="color:${k.color};font-weight:bold">${k.name}</td>
         <td>${race.icon} ${race.name}</td>
         <td>${pop}</td>
         <td>${k.villages.length}</td>
-        <td>${war ? '⚔️' : '☮️'}</td>
+        <td>${stateIcon}</td>
       </tr>`;
     }).join('');
   }

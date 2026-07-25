@@ -53,8 +53,19 @@ function isHostile(game, a, b) {
   if (!ra.civ || !rb.civ) return false;
   if (a.race === 'orc' || b.race === 'orc') return a.race !== b.race;
   if (a.kingdom && b.kingdom && a.kingdom !== b.kingdom) {
-    const k = game.kingdomById(a.kingdom);
-    if (k && k.wars.has(b.kingdom)) return true;
+    const ka = game.kingdomById(a.kingdom), kb = game.kingdomById(b.kingdom);
+    if (!ka || !kb) return false;
+    if (ka.allies.has(b.kingdom)) return false;             // 盟友不互打
+    if (ka.wars.has(b.kingdom)) return true;                // 直接交战
+    // A的盟友与B交战 → A也被卷入
+    for (const aid of ka.allies) {
+      const ally = game.kingdomById(aid);
+      if (ally && ally.wars.has(b.kingdom)) return true;
+    }
+    for (const bid of kb.allies) {
+      const ally = game.kingdomById(bid);
+      if (ally && ally.wars.has(a.kingdom)) return true;
+    }
   }
   return false;
 }
@@ -275,7 +286,7 @@ class Unit {
     });
 
     const kingdom = game.kingdomById(this.kingdom);
-    const atWar = kingdom && kingdom.wars.size > 0;
+    const atWar = kingdomAtWar(game, kingdom);
     // 战时成为战士
     if (this.adult && atWar && this.job === 'none' && Math.random() < 0.02) this.job = 'warrior';
     if (!atWar && this.job === 'warrior') this.job = 'none';
@@ -501,7 +512,7 @@ class Village {
     if (this.pop > cap) delta += 1.2;
     if (hasPlague) delta += 2.5;
     const kingdom = game.kingdomById(this.kingdom);
-    if (kingdom && kingdom.wars.size > 0) delta += 0.6;
+    if (kingdom && kingdomAtWar(game, kingdom)) delta += 0.6;
     this.unrest = Math.max(0, Math.min(100, this.unrest + delta));
   }
 
@@ -726,6 +737,7 @@ class Kingdom {
     this.color = KINGDOM_COLORS[(this.id - 1) % KINGDOM_COLORS.length];
     this.villages = [];
     this.wars = new Set();
+    this.allies = new Set();
   }
 }
 
@@ -783,7 +795,13 @@ function tryFoundVillage(game, unit) {
 
 function findWarTarget(game, kingdom, unit) {
   let best = null, bd = Infinity;
-  for (const vkId of kingdom.wars) {
+  // 收集所有敌方王国(自己的敌人 + 盟友的敌人)
+  const enemies = new Set(kingdom.wars);
+  for (const aid of kingdom.allies) {
+    const ally = game.kingdomById(aid);
+    if (ally) for (const wid of ally.wars) enemies.add(wid);
+  }
+  for (const vkId of enemies) {
     const enemy = game.kingdomById(vkId);
     if (!enemy) continue;
     for (const vid of enemy.villages) {
@@ -796,7 +814,18 @@ function findWarTarget(game, kingdom, unit) {
   return best;
 }
 
-/* 王国间战争判定 (每150 tick) */
+/* 王国或其任一盟友处于战争 */
+function kingdomAtWar(game, kingdom) {
+  if (!kingdom) return false;
+  if (kingdom.wars.size > 0) return true;
+  for (const aid of kingdom.allies) {
+    const ally = game.kingdomById(aid);
+    if (ally && ally.wars.size > 0) return true;
+  }
+  return false;
+}
+
+/* 王国间战争判定 & 同盟外交 (每150 tick) */
 function kingdomsTick(game) {
   const ks = game.kingdoms.filter(k => k.villages.length > 0);
   for (let i = 0; i < ks.length; i++) {
@@ -816,23 +845,50 @@ function kingdomsTick(game) {
       }
       const orcWar = (A.race === 'orc' || B.race === 'orc') && A.race !== B.race;
       const atWar = A.wars.has(B.id);
+
+      // --- 战争宣言/议和 ---
       if (minD < 50 || (orcWar && minD < 80)) {
         if (!atWar) {
           if (orcWar || Math.random() < 0.18) {
             A.wars.add(B.id); B.wars.add(A.id);
             game.logEvent('war', `⚔️ 「${A.name}」向「${B.name}」宣战!`, A.color);
+            // 宣战即解除同盟(背刺)
+            if (A.allies.has(B.id)) {
+              A.allies.delete(B.id); B.allies.delete(B.id);
+              game.logEvent('alliance', `💔 「${A.name}」背叛了与「${B.name}」的同盟！`);
+            }
           }
         } else if (!orcWar && Math.random() < 0.12) {
           A.wars.delete(B.id); B.wars.delete(A.id);
           game.logEvent('war', `🕊️ 「${A.name}」与「${B.name}」议和了`);
         }
       }
+
+      // --- 同盟缔结 (邻近且非战争非兽人, 各有盟友<=3) ---
+      if (!atWar && !orcWar && minD < 45 && A.allies.size < 3 && B.allies.size < 3) {
+        const hasCommon = [...A.wars].some(w => B.wars.has(w));
+        const sameRace = A.race === B.race && minD < 35;
+        const chance = hasCommon ? 0.30 : (sameRace ? 0.20 : 0.08);
+        if (Math.random() < chance) {
+          A.allies.add(B.id); B.allies.add(A.id);
+          game.logEvent('alliance', `🤝 「${A.name}」与「${B.name}」缔结了同盟！`);
+        }
+      }
+
+      // --- 同盟瓦解 (无共同敌人且异族, 概率断交) ---
+      if (A.allies.has(B.id)) {
+        const hasCommon = [...A.wars].some(w => B.wars.has(w));
+        if (!hasCommon && A.race !== B.race && Math.random() < 0.15) {
+          A.allies.delete(B.id); B.allies.delete(B.id);
+          game.logEvent('alliance', `💔 「${A.name}」与「${B.name}」的同盟破裂了`);
+        }
+      }
     }
   }
-  // 清理没有村庄的王国
+  // 清理没有村庄的王国(包括 allies 清理)
   for (const k of game.kingdoms) {
     if (k.villages.length === 0) {
-      for (const o of game.kingdoms) o.wars.delete(k.id);
+      for (const o of game.kingdoms) { o.wars.delete(k.id); o.allies.delete(k.id); }
     }
   }
   game.kingdoms = game.kingdoms.filter(k => k.villages.length > 0);
