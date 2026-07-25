@@ -27,6 +27,8 @@ const Game = {
   world: null,
   units: [], villages: [], kingdoms: [],
   particles: [], tornadoes: [], tnts: [], quakes: [],
+  events: [],
+  settings: {},
   cam: { x: 0, y: 0, zoom: 2 },
   speed: 3, paused: false,
   tool: 'inspect', currentTool: null, brush: 2,
@@ -43,7 +45,7 @@ const Game = {
   kingdomById(id) { return this.kingdoms.find(k => k.id === id) || null; },
 
   addParticle(x, y, vx, vy, life, color, size) {
-    if (this.particles.length > 1500) return;
+    if (!this.settings.showParticles || this.particles.length > 1500) return;
     this.particles.push({ x, y, vx, vy, life, color, size: size || 1.5 });
   },
 
@@ -55,6 +57,26 @@ const Game = {
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => el.classList.add('hidden'), 2500);
   },
+
+  logEvent(type, msg, color) {
+    const entry = { year: (this.tick / 600) | 0, type, msg, color: color || null };
+    this.events.unshift(entry);
+    if (this.events.length > 150) this.events.length = 150;
+    this.toast(msg);
+    if (this.settings.autoPauseEvents && type !== 'world') {
+      this.paused = true; this.ui && this.ui.setPaused(true);
+    }
+    if (this.ui) this.ui.refreshEventLog();
+  },
+
+  loadSettings() {
+    const def = { worldSize: 192, maxUnits: 900, showZones: true, showVillageNames: true, showParticles: true, autoPauseEvents: false };
+    try {
+      const s = JSON.parse(localStorage.getItem('wb_settings') || '{}');
+      this.settings = Object.assign(def, s);
+    } catch(e) { this.settings = Object.assign({}, def); }
+  },
+  saveSettings() { localStorage.setItem('wb_settings', JSON.stringify(this.settings)); },
 
   select(sel) { this.selected = sel; this.ui && this.ui.refreshInspector(); },
 
@@ -73,8 +95,10 @@ const Game = {
     this.world = new World(size, size);
     this.units = []; this.villages = []; this.kingdoms = [];
     this.particles = []; this.tornadoes = []; this.tnts = []; this.quakes = [];
+    this.events = [];
     this.tick = 0; this.shake = 0; this.selected = null;
     this.weather.rain = 0;
+    this.maxUnits = this.settings.maxUnits || 900;
     this.cam.x = size / 2; this.cam.y = size / 2;
     this.cam.zoom = Math.max(0.8, Math.min(window.innerWidth, window.innerHeight) / (size * TILE) * 1.2);
     this.renderer.allocMapCaches();
@@ -88,14 +112,12 @@ const Game = {
     for (let i = 0; i < 8; i++) { const p = this.world.randLandPos(null, true); if (p) spawnUnits(this, 'chicken', p.x, p.y, 3); }
     for (let i = 0; i < 5; i++) { const p = this.world.randLandPos(null, true); if (p) spawnUnits(this, 'cow', p.x, p.y, 2); }
     for (let i = 0; i < 3; i++) { const p = this.world.randLandPos(null, true); if (p) spawnUnits(this, 'wolf', p.x, p.y, 1); }
-    this.toast('🌍 新世界诞生了!');
+    this.logEvent('world', '🌍 新世界诞生了!');
   },
 
   newWorldPrompt() {
     if (!confirm('确定要生成新世界吗？当前世界将被清空（可先 💾 保存）')) return;
-    const s = prompt('选择地图大小：\n1 = 小 (128×128)\n2 = 中 (192×192)\n3 = 大 (256×256)', '2');
-    const size = { '1': 128, '2': 192, '3': 256 }[s] || 192;
-    this.newWorld(size);
+    this.newWorld(this.settings.worldSize || 192);
   },
 
   /* ---------- 存档 ---------- */
@@ -122,6 +144,7 @@ const Game = {
           villages: k.villages, wars: [...k.wars],
         })),
         cam: this.cam,
+        events: this.events.slice(0, 80),
       };
       localStorage.setItem('wb_save', JSON.stringify(data));
       this.toast('💾 世界已保存!');
@@ -168,6 +191,8 @@ const Game = {
       _villageId = Math.max(0, ...this.villages.map(v => v.id)) + 1;
       _kingdomId = Math.max(0, ...this.kingdoms.map(k => k.id)) + 1;
       this.particles = []; this.tornadoes = []; this.tnts = []; this.quakes = [];
+      this.events = d.events || [];
+      this.maxUnits = this.settings.maxUnits || 900;
       this.selected = null;
       if (d.cam) this.cam = d.cam;
       this.renderer.allocMapCaches();
@@ -315,11 +340,6 @@ function bindInput() {
     if (e.target.tagName === 'INPUT') return;
     keys[e.key.toLowerCase()] = true;
     if (e.key === ' ') { e.preventDefault(); Game.ui.setPaused(!Game.paused); }
-    if (e.key === 'Escape') {
-      document.getElementById('tool-popup').classList.add('hidden');
-      document.getElementById('help-modal').classList.add('hidden');
-      Game.select(null);
-    }
     if (e.key === '+' || e.key === '=') Game.zoomBy(1.3);
     if (e.key === '-') Game.zoomBy(1 / 1.3);
     const cats = ['terrain', 'life', 'destroy', 'other'];
@@ -343,7 +363,8 @@ function bindInput() {
 window.addEventListener('load', () => {
   Game.cv = document.getElementById('game');
   Game.renderer = new Renderer(Game.cv, Game);
-  Game.newWorld(192);
+  Game.loadSettings();
+  Game.newWorld(Game.settings.worldSize || 192);
   Game.ui = new UI(Game, Game.renderer);
   bindInput();
 

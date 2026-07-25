@@ -18,10 +18,13 @@ const game = {
   world: null,
   units: [], villages: [], kingdoms: [],
   particles: [], tornadoes: [], tnts: [], quakes: [],
+  events: [],
+  settings: { showZones: true, showVillageNames: true, showParticles: true, maxUnits: 900 },
   weather: { rain: 0 }, shake: 0, tick: 0,
   maxUnits: 900,
   toasts: [],
   toast(m) { this.toasts.push(m); },
+  logEvent(type, msg, color) { this.toasts.push(msg); this.events.unshift({ year: (this.tick / 600) | 0, type, msg, color }); },
   addParticle(x, y, vx, vy, life, color, size) {
     if (this.particles.length < 2000) this.particles.push({ x, y, vx, vy, life, color, size });
   },

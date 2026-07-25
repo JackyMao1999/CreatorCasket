@@ -253,7 +253,7 @@ const TOOLS = [
       w.setLava(land.x, land.y, 9999);
       w.volcanoes.push({ x: land.x, y: land.y });
       game.shake = 8;
-      game.toast('🌋 一座火山拔地而起!');
+      game.logEvent('disaster', '🌋 一座火山拔地而起!');
     }
   },
   {
@@ -283,7 +283,7 @@ const TOOLS = [
         game.addParticle(x - 6 + i * 0.4, y - 9 + i * 0.6, 0.15, 0.3, 20, i % 2 ? '#f2a03d' : '#e33d1e', 2.5);
       }
       explode(game, x, y, 5, { lava: true, dmg: 120 });
-      game.toast('☄️ 陨石撞击!');
+      game.logEvent('disaster', '☄️ 陨石撞击!');
     }
   },
   {
@@ -292,14 +292,14 @@ const TOOLS = [
       const land = game.world.nearestLand(x | 0, y | 0, 15);
       if (!land) { game.toast('⚠️ 需要放置在陆地上'); return; }
       game.tornadoes.push({ x: land.x, y: land.y, vx: 0.05, vy: 0, life: 800 });
-      game.toast('🌪️ 龙卷风来袭!');
+      game.logEvent('disaster', '🌪️ 龙卷风来袭!');
     }
   },
   {
     id: 'quake', cat: 'destroy', name: '地震', icon: '💥', brush: false,
     apply(game, x, y) {
       game.quakes.push({ x, y, r: 13, life: 160 });
-      game.toast('💥 地震!');
+      game.logEvent('disaster', '💥 地震!');
     }
   },
   { id: 'tnt', cat: 'destroy', name: 'TNT', icon: '🧨', brush: false, drag: true, apply: (g, x, y) => g.tnts.push({ x, y, life: 50 }) },
@@ -308,7 +308,7 @@ const TOOLS = [
     apply(game, x, y) {
       explode(game, x, y, 13, { lava: true, dmg: 400 });
       game.shake = 30;
-      game.toast('☢️ 核弹爆炸! 世界在颤抖……');
+      game.logEvent('disaster', '☢️ 核弹爆炸! 世界在颤抖……');
     }
   },
 
@@ -334,14 +334,14 @@ const TOOLS = [
       for (const u of list) {
         if (RACES[u.race].civ && u.bless <= 0) u.plague = 1200;
       }
-      if (list.length) game.toast('☠️ 瘟疫开始蔓延……');
+      if (list.length) game.logEvent('plague', '☠️ 瘟疫开始蔓延……');
     }
   },
   {
     id: 'rain', cat: 'other', name: '降雨', icon: '🌧️', brush: false,
     apply(game) {
       game.weather.rain = 900;
-      game.toast('🌧️ 天降大雨, 火焰将被浇灭');
+      game.logEvent('nature', '🌧️ 天降大雨, 火焰将被浇灭');
     }
   },
   {

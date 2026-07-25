@@ -11,10 +11,14 @@ class UI {
     this.bindTopbar();
     this.bindMinimap();
     this.bindHelp();
+    this.bindPanels();
     this.selectTool('inspect');
     this.updateTopbar();
+    this.refreshEventLog();
+    this.refreshFactions();
     setInterval(() => this.updateTopbar(), 500);
     setInterval(() => this.refreshInspector(), 600);
+    setInterval(() => { this.refreshFactions(); this.refreshEventLog(); }, 1500);
     setInterval(() => this.renderer.drawMinimap(this.$('minimap')), 800);
     setTimeout(() => this.renderer.drawMinimap(this.$('minimap')), 100);
   }
@@ -95,7 +99,19 @@ class UI {
     this.$('btn-save').onclick = () => g.saveWorld();
     this.$('btn-load').onclick = () => g.loadWorld();
     this.$('btn-new').onclick = () => g.newWorldPrompt();
+    this.$('btn-events').onclick = () => this.togglePanel('event-log');
+    this.$('btn-factions').onclick = () => this.togglePanel('faction-panel');
+    this.$('btn-settings').onclick = () => this.openSettings();
     this.$('insp-close').onclick = () => g.select(null);
+  }
+
+  togglePanel(id) {
+    const el = this.$(id);
+    el.classList.toggle('hidden');
+    if (!el.classList.contains('hidden')) {
+      if (id === 'faction-panel') this.refreshFactions();
+      else this.refreshEventLog();
+    }
   }
 
   setPaused(p) {
@@ -186,5 +202,120 @@ class UI {
       this.$('help-modal').classList.remove('hidden');
       localStorage.setItem('wb_seen_help', '1');
     }
+  }
+
+  /* ---------- 事件记录 & 势力列表 & 设置 ---------- */
+  bindPanels() {
+    const hotkeys = (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.key === 'e' && !e.ctrlKey && !e.metaKey) this.togglePanel('event-log');
+      if (e.key === 'k' && !e.ctrlKey && !e.metaKey) this.togglePanel('faction-panel');
+      if (e.key === 'Escape') {
+        const el = document.getElementById('settings-modal');
+        if (!el.classList.contains('hidden')) el.classList.add('hidden');
+        else if (!this.$('tool-popup').classList.contains('hidden')) this.$('tool-popup').classList.add('hidden');
+        else if (!this.$('help-modal').classList.contains('hidden')) this.$('help-modal').classList.add('hidden');
+        else this.game.select(null);
+      }
+    };
+    window.addEventListener('keydown', hotkeys);
+
+    this.$('settings-close').onclick = () => this.closeSettings();
+    this.$('settings-modal').onclick = (e) => {
+      if (e.target === this.$('settings-modal')) this.closeSettings();
+    };
+
+    // 势力列表点击跳转
+    this.$('faction-body').addEventListener('click', (e) => {
+      const tr = e.target.closest('tr');
+      if (!tr) return;
+      const cx = parseFloat(tr.dataset.cx), cy = parseFloat(tr.dataset.cy);
+      if (isFinite(cx)) { Game.cam.x = cx; Game.cam.y = cy; }
+    });
+
+    // 设置控件
+    this.$('set-worldsize').onchange = (e) => {
+      this.game.settings.worldSize = parseInt(e.target.value);
+      this.game.saveSettings();
+    };
+    this.$('set-maxunits').oninput = (e) => {
+      const v = parseInt(e.target.value);
+      this.game.maxUnits = v;
+      this.game.settings.maxUnits = v;
+      this.$('lbl-maxunits').textContent = '(' + v + ')';
+      this.game.saveSettings();
+    };
+    this.$('set-zones').onchange = (e) => {
+      this.game.settings.showZones = e.target.checked;
+      if (this.game.world) this.game.world.overlayDirty = true;
+      this.game.saveSettings();
+    };
+    this.$('set-vnames').onchange = (e) => {
+      this.game.settings.showVillageNames = e.target.checked;
+      this.game.saveSettings();
+    };
+    this.$('set-particles').onchange = (e) => {
+      this.game.settings.showParticles = e.target.checked;
+      this.game.saveSettings();
+    };
+    this.$('set-autopause').onchange = (e) => {
+      this.game.settings.autoPauseEvents = e.target.checked;
+      this.game.saveSettings();
+    };
+  }
+
+  refreshEventLog() {
+    const list = this.$('event-list');
+    if (!list) return;
+    const events = this.game.events.slice(0, 30);
+    list.innerHTML = events.map(e => {
+      const y = e.year + 1;
+      // Kingdom names colored
+      let msg = e.msg;
+      if (e.color) msg = msg.replace(/「(.+?)」/g, `<b style="color:${e.color}">「$1」</b>`);
+      return `<div class="event-item">📅 ${y}年 ${msg}</div>`;
+    }).join('');
+  }
+
+  refreshFactions() {
+    const body = this.$('faction-body');
+    if (!body) return;
+    const g = this.game;
+    const ks = [...g.kingdoms].filter(k => k.villages.length > 0);
+    ks.sort((a, b) => {
+      const ap = g.villages.filter(v => v.kingdom === a.id).reduce((s, v) => s + v.pop, 0);
+      const bp = g.villages.filter(v => v.kingdom === b.id).reduce((s, v) => s + v.pop, 0);
+      return bp - ap;
+    });
+    body.innerHTML = ks.map(k => {
+      const vills = g.villages.filter(v => v.kingdom === k.id);
+      const pop = vills.reduce((s, v) => s + v.pop, 0);
+      const race = RACES[k.race];
+      const war = k.wars.size > 0;
+      const jumpV = vills[0];
+      return `<tr class="${war ? 'war-row' : ''}" data-cx="${jumpV ? jumpV.cx : ''}" data-cy="${jumpV ? jumpV.cy : ''}">
+        <td style="color:${k.color};font-weight:bold">${k.name}</td>
+        <td>${race.icon} ${race.name}</td>
+        <td>${pop}</td>
+        <td>${k.villages.length}</td>
+        <td>${war ? '⚔️' : '☮️'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  openSettings() {
+    const s = this.game.settings;
+    this.$('set-worldsize').value = s.worldSize || 192;
+    this.$('set-maxunits').value = s.maxUnits || 900;
+    this.$('lbl-maxunits').textContent = '(' + (s.maxUnits || 900) + ')';
+    this.$('set-zones').checked = s.showZones !== false;
+    this.$('set-vnames').checked = s.showVillageNames !== false;
+    this.$('set-particles').checked = s.showParticles !== false;
+    this.$('set-autopause').checked = !!s.autoPauseEvents;
+    this.$('settings-modal').classList.remove('hidden');
+  }
+
+  closeSettings() {
+    this.$('settings-modal').classList.add('hidden');
   }
 }

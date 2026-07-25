@@ -220,7 +220,7 @@ class World {
           if (this.inB(lx, ly) && !isWaterT(this.get(lx, ly))) this.setLava(lx, ly, 300 + rng() * 500 | 0);
         }
         game.shake = Math.max(game.shake, 6);
-        game.toast('🌋 火山喷发!');
+        game.logEvent('disaster', '🌋 火山喷发!');
         for (let j = 0; j < 30; j++) {
           const a = rng() * Math.PI * 2, sp = 0.05 + rng() * 0.25;
           game.addParticle(v.x + 0.5, v.y, Math.cos(a) * sp, -0.2 - rng() * 0.3,

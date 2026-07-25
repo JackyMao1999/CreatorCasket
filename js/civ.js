@@ -37,6 +37,13 @@ const NameGen = {
   },
 };
 
+/* ---------- 叛军名称 ---------- */
+function generateRebelName(race) {
+  const pre = ['暴风', '自由', '反抗', '赤色', '黎明', '铁拳', '暗影', '烈焰', '苍月', '血旗', '破晓'];
+  const suf = ['反抗军', '自由军', '起义军', '解放阵线', '独立军', '同盟', '护民团'];
+  return pre[(Math.random() * pre.length) | 0] + suf[(Math.random() * suf.length) | 0];
+}
+
 /* ---------- 敌对判定 ---------- */
 function isHostile(game, a, b) {
   if (a === b) return false;
@@ -381,6 +388,7 @@ class Village {
     this.buildings = [];
     this.farmTiles = [];
     this.pop = 0;
+    this.unrest = 0;          // 不满度 0~100
     this.zoneDirty = true;
     this.tick = 0;
     this.dead = false;
@@ -470,12 +478,86 @@ class Village {
           }
         }
       }
+      // 不满度更新
+      this.tickUnrest(game);
     }
 
-    // 领地重算
+    // 领地重算 & 叛乱判定
     if (this.zoneDirty || this.tick % 300 === 0) {
       this.recomputeZone(game);
       this.zoneDirty = false;
+    }
+    if (this.tick % 300 === 0) this.checkRebellion(game);
+  }
+
+  tickUnrest(game) {
+    const cap = this.capacity();
+    let hasPlague = false;
+    for (const u of game.units) {
+      if (u.village === this.id && u.plague > 0) { hasPlague = true; break; }
+    }
+    let delta = -0.35;
+    if (this.food < this.pop) delta += 1.8;
+    if (this.pop > cap) delta += 1.2;
+    if (hasPlague) delta += 2.5;
+    const kingdom = game.kingdomById(this.kingdom);
+    if (kingdom && kingdom.wars.size > 0) delta += 0.6;
+    this.unrest = Math.max(0, Math.min(100, this.unrest + delta));
+  }
+
+  checkRebellion(game) {
+    if (this.unrest < 80) return;
+    const kingdom = game.kingdomById(this.kingdom);
+    if (!kingdom || kingdom.villages.length < 2) return;
+    if (this.dead) return;
+    // 30% 概率触发叛变
+    if (Math.random() > 0.3 * (this.unrest / 100)) return;
+
+    const newKingdom = new Kingdom(this.race);
+    newKingdom.name = generateRebelName(kingdom.race);
+    game.kingdoms.push(newKingdom);
+
+    // 将该村划入叛军王国
+    const oldVillages = kingdom.villages;
+    kingdom.villages = oldVillages.filter(id => id !== this.id);
+    newKingdom.villages.push(this.id);
+    this.kingdom = newKingdom.id;
+    this.unrest = 30; // 释放部分不满
+    this.zoneDirty = true;
+
+    // 村民改旗易帜
+    for (const u of game.units) {
+      if (u.village === this.id) u.kingdom = newKingdom.id;
+    }
+
+    // 宣战
+    kingdom.wars.add(newKingdom.id);
+    newKingdom.wars.add(kingdom.id);
+
+    game.logEvent('rebellion', `⚔️ 「${this.name}」发动叛乱，脱离「${kingdom.name}」成立「${newKingdom.name}」！`, kingdom.color);
+
+    // 连锁叛变: 同王国内距离 <35 且不满 >=60 的邻村有概率一并脱离
+    for (const vid of [...kingdom.villages]) {
+      const v = game.villageById(vid);
+      if (!v || v.kingdom !== kingdom.id) continue;
+      const d = Math.hypot(v.cx - this.cx, v.cy - this.cy);
+      if (d < 35 && v.unrest >= 60 && Math.random() < 0.45) {
+        kingdom.villages = kingdom.villages.filter(id => id !== vid);
+        newKingdom.villages.push(vid);
+        v.kingdom = newKingdom.id;
+        v.unrest = 25;
+        v.zoneDirty = true;
+        for (const u of game.units) {
+          if (u.village === v.id) u.kingdom = newKingdom.id;
+        }
+        game.logEvent('rebellion', `「${v.name}」也加入了叛军！`);
+      }
+    }
+
+    // 如果原王国没村庄了则清理
+    if (kingdom.villages.length === 0) {
+      for (const k of game.kingdoms) k.wars.delete(kingdom.id);
+      game.kingdoms = game.kingdoms.filter(k => k !== kingdom);
     }
   }
 
@@ -552,7 +634,8 @@ class Village {
     }
     const k = game.kingdomById(this.kingdom);
     if (k) k.villages = k.villages.filter(id => id !== this.id);
-    game.toast(`🔥 ${this.name} 被摧毁了!`);
+    const k0 = game.kingdomById(this.kingdom);
+    game.logEvent('village', `🔥 ${this.name} 被摧毁了!`, k0 ? k0.color : null);
   }
 }
 
@@ -684,7 +767,7 @@ function tryFoundVillage(game, unit) {
   if (!kingdom) {
     kingdom = new Kingdom(unit.race);
     game.kingdoms.push(kingdom);
-    game.toast(`👑 ${RACES[unit.race].name}建立了「${kingdom.name}」!`);
+    game.logEvent('kingdom', `👑 ${RACES[unit.race].name}建立了「${kingdom.name}」!`, kingdom.color);
   }
 
   const v = new Village(unit.race, kingdom.id, x, y);
@@ -694,7 +777,7 @@ function tryFoundVillage(game, unit) {
   unit.village = v.id; unit.kingdom = kingdom.id;
   if (unit.job === 'settler') { unit.job = 'none'; unit.settleT = 0; }
   v.recomputeZone(game);
-  game.toast(`🏠 「${v.name}」建成了!`);
+  game.logEvent('village', `🏠 「${v.name}」建成了!`);
   return true;
 }
 
@@ -737,11 +820,11 @@ function kingdomsTick(game) {
         if (!atWar) {
           if (orcWar || Math.random() < 0.18) {
             A.wars.add(B.id); B.wars.add(A.id);
-            game.toast(`⚔️ 「${A.name}」向「${B.name}」宣战!`);
+            game.logEvent('war', `⚔️ 「${A.name}」向「${B.name}」宣战!`, A.color);
           }
         } else if (!orcWar && Math.random() < 0.12) {
           A.wars.delete(B.id); B.wars.delete(A.id);
-          game.toast(`🕊️ 「${A.name}」与「${B.name}」议和了`);
+          game.logEvent('war', `🕊️ 「${A.name}」与「${B.name}」议和了`);
         }
       }
     }

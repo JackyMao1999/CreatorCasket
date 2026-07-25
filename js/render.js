@@ -148,6 +148,7 @@ class Renderer {
       for (let x = 0; x < w.w; x++) {
         const i = w.idx(x, y);
         // 领地
+        if (game.settings.showZones) {
         const z = w.zone[i];
         if (z) {
           const v = game.villageById(z);
@@ -168,6 +169,7 @@ class Renderer {
           if (zRight !== z) ctx.fillRect((x + 1) * TILE - 1, y * TILE, 1, TILE);
           ctx.globalAlpha = 1;
         }
+        } // showZones
         // 道路(水中则绘制木桥)
         if (w.road[i]) {
           if (isWaterT(w.tiles[i])) {
@@ -353,7 +355,7 @@ class Renderer {
         }
       }
       // 村庄名称(放大一定级别时)
-      if (game.cam.zoom > 1.2 && v.cx > vx0 && v.cx < vx1 && v.cy > vy0 && v.cy < vy1) {
+      if (game.settings.showVillageNames && game.cam.zoom > 1.2 && v.cx > vx0 && v.cx < vx1 && v.cy > vy0 && v.cy < vy1) {
         ctx.font = '0.9px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -418,6 +420,7 @@ class Renderer {
     }
 
     // 粒子
+    if (game.settings.showParticles) {
     for (const p of game.particles) {
       ctx.globalAlpha = Math.min(1, p.life / 25);
       ctx.fillStyle = p.color;
@@ -425,6 +428,7 @@ class Renderer {
       ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
     }
     ctx.globalAlpha = 1;
+    }
 
     ctx.restore();
 
