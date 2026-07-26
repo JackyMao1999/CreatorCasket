@@ -70,10 +70,11 @@ const Game = {
   },
 
   loadSettings() {
-    const def = { worldSize: 192, maxUnits: 900, showZones: true, showVillageNames: true, showParticles: true, autoPauseEvents: false };
+    const def = { worldSize: 192, maxUnits: 900, showZones: true, showVillageNames: true, showParticles: true, autoPauseEvents: false, worldLaws: { noWar: false, noPlague: false, noFire: false, noHunger: false } };
     try {
       const s = JSON.parse(localStorage.getItem('wb_settings') || '{}');
       this.settings = Object.assign(def, s);
+      if (!this.settings.worldLaws) this.settings.worldLaws = Object.assign({}, def.worldLaws);
     } catch(e) { this.settings = Object.assign({}, def); }
   },
   saveSettings() { localStorage.setItem('wb_settings', JSON.stringify(this.settings)); },
@@ -128,6 +129,7 @@ const Game = {
         ver: 1, w: w.w, h: w.h, seed: w.seed, tick: this.tick,
         tiles: u8ToB64(w.tiles), lavaT: u16ToB64(w.lavaT),
         farm: u8ToB64(w.farm), farmV: u16ToB64(w.farmV), road: u8ToB64(w.road),
+        resource: u8ToB64(w.resource),
         volcanoes: w.volcanoes,
         units: this.units.map(u => ({
           race: u.race, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, age: u.age,
@@ -136,7 +138,7 @@ const Game = {
         })),
         villages: this.villages.map(v => ({
           id: v.id, name: v.name, race: v.race, kingdom: v.kingdom,
-          cx: v.cx, cy: v.cy, radius: v.radius, food: v.food, wood: v.wood, pop: v.pop,
+          cx: v.cx, cy: v.cy, radius: v.radius, food: v.food, wood: v.wood, gold: v.gold, stone: v.stone, pop: v.pop,
           buildings: v.buildings, farmTiles: v.farmTiles,
         })),
         kingdoms: this.kingdoms.map(k => ({
@@ -164,6 +166,7 @@ const Game = {
       w.farm = b64ToU8(d.farm, Uint8Array);
       w.farmV = b64ToU16(d.farmV, Int16Array);
       w.road = b64ToU8(d.road, Uint8Array);
+      w.resource = d.resource ? b64ToU8(d.resource, Uint8Array) : new Uint8Array(w.w * w.h);
       w.volcanoes = d.volcanoes || [];
       w.fullRedraw = true;
       this.world = w;

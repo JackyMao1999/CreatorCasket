@@ -33,6 +33,7 @@ class World {
     this.farmV = new Int16Array(n);      // 农田所属村庄 id+1
     this.road = new Uint8Array(n);       // 道路
     this.zone = new Int16Array(n);       // 村庄领地 id+1
+    this.resource = new Uint8Array(n);   // 0无 1金矿 2石矿
     this.volcanoes = [];                 // {x,y}
     this.burning = new Set();            // 正在燃烧的地块索引
     this.dirty = new Set();              // 需要重绘的地块
@@ -125,6 +126,15 @@ class World {
         }
       }
     }
+    // 矿脉生成
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = x + y * w;
+        const t = this.tiles[i];
+        if (t === T.MOUNTAIN && rng() < 0.4) this.resource[i] = rng() < 0.5 ? 1 : 2;
+        else if (t === T.HILL && rng() < 0.15) this.resource[i] = 1;
+      }
+    }
     this.dirty.clear();
     this.fullRedraw = true;
   }
@@ -161,8 +171,9 @@ class World {
     const rng = this.rng;
     const rain = game.weather.rain > 0;
 
+    const noFire = game.settings.worldLaws && game.settings.worldLaws.noFire;
     // --- 火焰蔓延 ---
-    if (this.burning.size) {
+    if (!noFire && this.burning.size) {
       const arr = Array.from(this.burning);
       const step = rain ? 30 : 14; // 每次处理的火焰数, 雨天衰更快
       for (let k = 0; k < Math.min(arr.length, step + 10); k++) {

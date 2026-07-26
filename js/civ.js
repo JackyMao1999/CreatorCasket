@@ -229,7 +229,7 @@ class Unit {
     }
     if (this.plague > 0) {
       this.plague--;
-      this.hp -= 0.05;
+      if (!(game.settings.worldLaws && game.settings.worldLaws.noPlague)) this.hp -= 0.05;
       if (Math.random() < 0.15) game.addParticle(this.x + (Math.random() - .5) * .6, this.y - Math.random() * .5, 0, -0.03, 25, '#4a9a2a', 1.4);
       if (this.hp <= 0) { this.kill(game); return; }
       // 传播
@@ -430,6 +430,8 @@ class Village {
     this.farmTiles = [];
     this.pop = 0;
     this.wood = 0;            // 木材资源
+    this.gold = 0;            // 金矿资源
+    this.stone = 0;           // 石矿资源
     this.unrest = 0;          // 不满度 0~100
     this.zoneDirty = true;
     this.tick = 0;
@@ -481,7 +483,7 @@ class Village {
         this.pop++;
       }
       // 饥饿: 没食物且超生
-      if (this.food < 5 && this.pop > cap) {
+      if (this.food < 5 && this.pop > cap && !game.settings.worldLaws?.noHunger) {
         // 有人挨饿 -> 概率死亡
         if (Math.random() < 0.1) {
           const victim = game.units.find(u => u.village === this.id);
@@ -538,6 +540,18 @@ class Village {
       if (this.wood >= 5) {
         const boater = game.units.find(u => u.village === this.id && u.adult && u.job !== 'warrior' && !u.hasBoat);
         if (boater) { this.wood -= 5; boater.hasBoat = true; Sound.build(); }
+      }
+      // 采矿
+      if ((this.gold < 60 || this.stone < 40) && Math.random() < 0.2) {
+        for (let tries = 0; tries < 5; tries++) {
+          const a = Math.random() * Math.PI * 2, d = 3 + Math.random() * this.radius;
+          const tx = Math.round(this.cx + Math.cos(a) * d), ty = Math.round(this.cy + Math.sin(a) * d);
+          if (w.inB(tx, ty)) {
+            const ri = w.idx(tx, ty);
+            if (w.resource[ri] === 1) { this.gold++; w.resource[ri] = 0; break; }
+            if (w.resource[ri] === 2) { this.stone++; w.resource[ri] = 0; break; }
+          }
+        }
       }
       // 不满度更新
       this.tickUnrest(game);
@@ -902,7 +916,7 @@ function kingdomsTick(game) {
       // --- 战争宣言/议和 ---
       if (minD < 50 || (orcWar && minD < 80)) {
         if (!atWar) {
-          if (orcWar || Math.random() < 0.18) {
+          if (!game.settings.worldLaws?.noWar && (orcWar || Math.random() < 0.18)) {
             A.wars.add(B.id); B.wars.add(A.id);
             game.logEvent('war', `⚔️ 「${A.name}」向「${B.name}」宣战!`, A.color);
             Sound.war();

@@ -170,6 +170,7 @@ class UI {
         <div class="row"><span class="k">人口</span><span>${obj.pop}/${obj.capacity()}</span></div>
         <div class="row"><span class="k">食物</span><span>${obj.food | 0}</span></div>
         <div class="row"><span class="k">木材</span><span>${obj.wood | 0}</span></div>
+        <div class="row"><span class="k">金矿</span><span>${obj.gold | 0}</span> <span class="k">石矿</span><span>${obj.stone | 0}</span></div>
         <div class="row"><span class="k">房屋</span><span>${houses} 🏠 / ${farms} 🌾</span></div>
         <div class="row"><span class="k">半径</span><span>${obj.radius}</span></div>
         ${k && k.wars.size ? '<div style="color:#e14b4b">⚔️ 处于战争中</div>' : ''}`;
@@ -336,6 +337,14 @@ class UI {
       this.game.settings.autoPauseEvents = e.target.checked;
       this.game.saveSettings();
     };
+    // 世界法则
+    const laws = ['nowar', 'noplague', 'nofire', 'nohunger'];
+    laws.forEach(id => {
+      this.$('law-' + id).onchange = (e) => {
+        this.game.settings.worldLaws['no' + id.charAt(0).toUpperCase() + id.slice(1)] = e.target.checked;
+        this.game.saveSettings();
+      };
+    });
   }
 
   refreshEventLog() {
@@ -391,6 +400,11 @@ class UI {
     this.$('set-vnames').checked = s.showVillageNames !== false;
     this.$('set-particles').checked = s.showParticles !== false;
     this.$('set-autopause').checked = !!s.autoPauseEvents;
+    const l = s.worldLaws || {};
+    this.$('law-nowar').checked = !!l.noWar;
+    this.$('law-noplague').checked = !!l.noPlague;
+    this.$('law-nofire').checked = !!l.noFire;
+    this.$('law-nohunger').checked = !!l.noHunger;
     // 定位弹窗: 有记忆位置则恢复, 否则居中
     const box = this.$('settings-modal').querySelector('.modal-box');
     const saved = localStorage.getItem('wb_pos_settings');
