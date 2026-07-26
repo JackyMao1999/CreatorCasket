@@ -394,6 +394,7 @@ class Renderer {
         ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.fillRect(u.x - 0.3, u.y + 0.35, 0.6, 0.15);
       }
+      ctx.drawImage(spr, u.x - 0.5, u.y - 0.55, 1, 1);
       if (u.bless > 0) { ctx.fillStyle = 'rgba(255,224,112,0.8)'; ctx.fillRect(u.x - 0.1, u.y - 0.85, 0.2, 0.2); }
       if (u.plague > 0) { ctx.fillStyle = 'rgba(74,154,42,0.8)'; ctx.fillRect(u.x - 0.45, u.y - 0.5, 0.9, 0.9); }
       // 领袖王冠
