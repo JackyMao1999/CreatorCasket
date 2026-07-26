@@ -267,9 +267,19 @@ class Unit {
 
   /* ---------- 动物AI ---------- */
   tickAnimal(game) {
-    // 鱼: 水域闲逛, 繁殖
+    // 鱼: 仅在水域游动+繁殖
     if (this.race === 'fish') {
-      this.wander(game, 6);
+      // 选水域目标
+      if (this.wanderCd <= 0 || Math.hypot(this.tx - this.x, this.ty - this.y) < 0.6) {
+        this.wanderCd = 50 + Math.random() * 100 | 0;
+        const a = Math.random() * Math.PI * 2, d = Math.random() * 5;
+        const nx = this.x + Math.cos(a) * d, ny = this.y + Math.sin(a) * d;
+        if (game.world.inB(nx | 0, ny | 0) && isWaterT(game.world.get(nx | 0, ny | 0))) {
+          this.tx = nx; this.ty = ny;
+        }
+      }
+      if (this.wanderCd > 0) this.wanderCd--;
+      this.moveToward(game, this.tx, this.ty, 0.7);
       if (this.adult && Math.random() < 0.0003) {
         let count = 0;
         for (const u of game.units) if (u.race === 'fish') count++;

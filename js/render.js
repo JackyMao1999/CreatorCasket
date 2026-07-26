@@ -382,8 +382,8 @@ class Renderer {
       if (u.x < vx0 - 1 || u.x > vx1 + 1 || u.y < vy0 - 1 || u.y > vy1 + 1) continue;
       const k = u.kingdom ? game.kingdomById(u.kingdom) : null;
       const spr = this.getUnitSprite(u, k ? k.color : null);
-      // 船只
-      if (u.hasBoat) {
+      // 船只(仅在水域绘制)
+      if (u.hasBoat && isWaterT(game.world.get(u.x | 0, u.y | 0))) {
         ctx.fillStyle = '#8b6b4a'; ctx.fillRect(u.x - 0.35, u.y + 0.15, 0.7, 0.2);
         ctx.fillStyle = '#a08060'; ctx.fillRect(u.x - 0.25, u.y + 0.1, 0.1, 0.25);
         ctx.fillStyle = '#6a4f3a'; ctx.fillRect(u.x - 0.35, u.y + 0.33, 0.7, 0.06);
