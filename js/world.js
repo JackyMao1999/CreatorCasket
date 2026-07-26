@@ -221,6 +221,7 @@ class World {
         }
         game.shake = Math.max(game.shake, 6);
         game.logEvent('disaster', '🌋 火山喷发!');
+        Sound.erupt();
         for (let j = 0; j < 30; j++) {
           const a = rng() * Math.PI * 2, sp = 0.05 + rng() * 0.25;
           game.addParticle(v.x + 0.5, v.y, Math.cos(a) * sp, -0.2 - rng() * 0.3,

@@ -250,6 +250,7 @@ function bindInput() {
   }
 
   cv.addEventListener('mousedown', (e) => {
+    Sound.resume();
     e.preventDefault();
     updateMouse(e);
     moved = false;
@@ -363,6 +364,7 @@ function bindInput() {
 /* ---------- 启动 ---------- */
 window.addEventListener('load', () => {
   Game.cv = document.getElementById('game');
+  Sound.init();
   Game.renderer = new Renderer(Game.cv, Game);
   Game.loadSettings();
   Game.newWorld(Game.settings.worldSize || 192);

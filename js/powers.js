@@ -47,6 +47,7 @@ function explode(game, x, y, r, opts) {
       30 + Math.random() * 50 | 0, ['#e33d1e', '#f2a03d', '#555', '#333'][(Math.random() * 4) | 0], 1.5 + Math.random() * 2.5);
   }
   game.shake = Math.max(game.shake, Math.min(30, r * 2));
+  Sound.explosion();
 }
 
 function lightning(game, x, y) {
@@ -69,6 +70,7 @@ function lightning(game, x, y) {
   const t = w.get(tx, ty);
   if (t === T.GRASS || t === T.FOREST) w.set(tx, ty, T.BURNT);
   game.shake = Math.max(game.shake, 4);
+  Sound.thunder();
 }
 
 function spawnUnits(game, race, x, y, count) {
@@ -254,6 +256,7 @@ const TOOLS = [
       w.volcanoes.push({ x: land.x, y: land.y });
       game.shake = 8;
       game.logEvent('disaster', '🌋 一座火山拔地而起!');
+      Sound.erupt();
     }
   },
   {
@@ -300,6 +303,7 @@ const TOOLS = [
     apply(game, x, y) {
       game.quakes.push({ x, y, r: 13, life: 160 });
       game.logEvent('disaster', '💥 地震!');
+      Sound.quake();
     }
   },
   { id: 'tnt', cat: 'destroy', name: 'TNT', icon: '🧨', brush: false, drag: true, apply: (g, x, y) => g.tnts.push({ x, y, life: 50 }) },
@@ -323,6 +327,7 @@ const TOOLS = [
         u.bless = 3600; u.plague = 0; u.hp = u.maxHp;
         game.addParticle(u.x, u.y - 0.5, 0, -0.06, 40, '#ffe070', 1.5);
       }
+      if (list.length) Sound.bless();
     }
   },
   {
@@ -334,7 +339,7 @@ const TOOLS = [
       for (const u of list) {
         if (RACES[u.race].civ && u.bless <= 0) u.plague = 1200;
       }
-      if (list.length) game.logEvent('plague', '☠️ 瘟疫开始蔓延……');
+      if (list.length) { game.logEvent('plague', '☠️ 瘟疫开始蔓延……'); Sound.plague(); }
     }
   },
   {
@@ -342,6 +347,7 @@ const TOOLS = [
     apply(game) {
       game.weather.rain = 900;
       game.logEvent('nature', '🌧️ 天降大雨, 火焰将被浇灭');
+      Sound.rain();
     }
   },
   {

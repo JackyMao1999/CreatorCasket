@@ -145,12 +145,14 @@ class Unit {
       game.addParticle(this.x + (Math.random() - 0.5) * 0.5, this.y + (Math.random() - 0.5) * 0.5,
         (Math.random() - 0.5) * 0.15, -0.05 - Math.random() * 0.1, 20 + Math.random() * 20 | 0, '#c02020', 1.2);
     }
+    Sound.hit();
     if (this.hp <= 0) this.kill(game);
   }
 
   kill(game) {
     if (this.dead) return;
     this.dead = true;
+    Sound.death();
     for (let i = 0; i < 8; i++) {
       game.addParticle(this.x, this.y, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2,
         30 + Math.random() * 20 | 0, '#a01818', 1.5);
@@ -187,9 +189,9 @@ class Unit {
       if (tm > 0) {
         const ms = sp * tm;
         this.x += cx * ms; this.y += cy * ms;
-        if (tm < 1 && Math.random() < 0.5) game.addParticle(
+        if (tm < 1 && Math.random() < 0.5) { Sound.water(); game.addParticle(
           this.x + (Math.random() - .5) * .4, this.y + .35,
-          (Math.random() - .5) * .04, -0.04, 18, '#a0d8f0', 1.3);
+          (Math.random() - .5) * .04, -0.04, 18, '#a0d8f0', 1.3); }
         return dist <= ms;
       }
     }
@@ -393,7 +395,7 @@ class Unit {
       if (d2 < 2.6) {
         site.progress += 0.012;
         if (Math.random() < 0.1) game.addParticle(site.x + (Math.random() - .5), site.y - Math.random() * .5, 0, -0.05, 15, '#d8c890', 1);
-        if (site.progress >= 1) completeBuilding(game, village, site);
+        if (site.progress >= 1) { completeBuilding(game, village, site); Sound.build(); }
       } else this.moveToward(game, site.x, site.y, 1);
       return;
     }
@@ -573,6 +575,7 @@ class Village {
     newKingdom.wars.add(kingdom.id);
 
     game.logEvent('rebellion', `⚔️ 「${this.name}」发动叛乱，脱离「${kingdom.name}」成立「${newKingdom.name}」！`, kingdom.color);
+    Sound.rebel();
 
     // 连锁叛变: 同王国内距离 <35 且不满 >=60 的邻村有概率一并脱离
     for (const vid of [...kingdom.villages]) {
@@ -807,6 +810,7 @@ function tryFoundVillage(game, unit) {
     kingdom = new Kingdom(unit.race);
     game.kingdoms.push(kingdom);
     game.logEvent('kingdom', `👑 ${RACES[unit.race].name}建立了「${kingdom.name}」!`, kingdom.color);
+    Sound.found();
   }
 
   const v = new Village(unit.race, kingdom.id, x, y);
@@ -817,6 +821,7 @@ function tryFoundVillage(game, unit) {
   if (unit.job === 'settler') { unit.job = 'none'; unit.settleT = 0; }
   v.recomputeZone(game);
   game.logEvent('village', `🏠 「${v.name}」建成了!`);
+  Sound.found();
   return true;
 }
 
@@ -879,6 +884,7 @@ function kingdomsTick(game) {
           if (orcWar || Math.random() < 0.18) {
             A.wars.add(B.id); B.wars.add(A.id);
             game.logEvent('war', `⚔️ 「${A.name}」向「${B.name}」宣战!`, A.color);
+            Sound.war();
             // 宣战即解除同盟(背刺)
             if (A.allies.has(B.id)) {
               A.allies.delete(B.id); B.allies.delete(B.id);

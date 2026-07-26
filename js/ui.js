@@ -73,6 +73,7 @@ class UI {
   selectTool(id) {
     const tool = toolById(id);
     if (!tool) return;
+    Sound.click();
     this.game.tool = id;
     this.game.currentTool = tool;
     this.$('cur-tool').textContent = tool.icon + ' ' + tool.name;

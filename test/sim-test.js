@@ -11,6 +11,7 @@ Object.assign(M, { T, World, Unit, Village, Kingdom, RACES, spawnUnits, civTick,
   explode, lightning, makeRNG, forEachNear, nearestVillage, tryFoundVillage, TOOLS, isHostile,
   rebuildSpatial, brushTiles });
 `;
+globalThis.Sound = { init(){}, resume(){}, hit(){}, death(){}, water(){}, build(){}, found(){}, war(){}, rebel(){}, erupt(){}, explosion(){}, thunder(){}, quake(){}, plague(){}, bless(){}, rain(){}, click(){} };
 eval(src);
 
 /* ---------- Game 桩 ---------- */
