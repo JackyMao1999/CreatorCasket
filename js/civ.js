@@ -129,7 +129,7 @@ class Unit {
     this.age = 0;               // tick 计, 600 tick = 1年
     this.village = 0;           // 村庄 id
     this.kingdom = 0;           // 王国 id
-    this.job = 'none';          // none | warrior | settler
+    this.job = 'none';          // none | warrior | settler | builder | lumberjack | miner | priest
     this.tx = x; this.ty = y;   // 移动目标
     this.atkCd = 0;
     this.wanderCd = 0;
@@ -471,7 +471,87 @@ class Unit {
       }
     }
 
-    // 5) 建造
+    // 5) 伐木工: 在领地内寻找森林砍伐
+    if (this.job === 'lumberjack' && village.wood < 80) {
+      let bestTree = null, bt = 400;
+      for (let dy = -village.radius; dy <= village.radius; dy++) {
+        for (let dx = -village.radius; dx <= village.radius; dx++) {
+          const tx = village.cx + dx, ty = village.cy + dy;
+          if (w.inB(tx, ty) && w.tiles[w.idx(tx, ty)] === T.FOREST) {
+            const d = (tx - this.x) ** 2 + (ty - this.y) ** 2;
+            if (d < bt) { bt = d; bestTree = { x: tx, y: ty }; }
+          }
+        }
+      }
+      if (bestTree) {
+        if (Math.hypot(bestTree.x - this.x, bestTree.y - this.y) < 1.5) {
+          w.set(bestTree.x, bestTree.y, T.GRASS);
+          village.wood += 1 + (Math.random() * 3 | 0);
+          for (let i = 0; i < 3; i++) game.addParticle(bestTree.x + Math.random(), bestTree.y + Math.random() * .5, (Math.random() - .5) * .05, -0.06, 20, '#9a7b50', 1.5);
+          Sound.hit();
+          if (village.wood >= 40) this.job = 'none';
+        } else this.moveToward(game, bestTree.x, bestTree.y, 1);
+        return;
+      }
+      this.job = 'none'; // 没树了, 回归平民
+    }
+
+    // 6) 矿工: 在领地内寻找矿脉开采
+    if (this.job === 'miner' && (village.gold < 30 || village.stone < 20)) {
+      let bestOre = null, bo = 400;
+      for (let dy = -village.radius; dy <= village.radius; dy++) {
+        for (let dx = -village.radius; dx <= village.radius; dx++) {
+          const tx = village.cx + dx, ty = village.cy + dy;
+          if (w.inB(tx, ty) && w.resource[w.idx(tx, ty)]) {
+            const d = (tx - this.x) ** 2 + (ty - this.y) ** 2;
+            if (d < bo) { bo = d; bestOre = { x: tx, y: ty, type: w.resource[w.idx(tx, ty)] }; }
+          }
+        }
+      }
+      if (bestOre) {
+        if (Math.hypot(bestOre.x - this.x, bestOre.y - this.y) < 1.5) {
+          const ri = w.idx(bestOre.x, bestOre.y);
+          if (bestOre.type === 1) village.gold++;
+          else village.stone++;
+          w.resource[ri] = 0;
+          for (let i = 0; i < 4; i++) game.addParticle(bestOre.x + Math.random(), bestOre.y + Math.random() * .5, (Math.random() - .5) * .04, -0.06, 18, '#f2c14e', 1.3);
+          Sound.hit();
+          if (village.gold >= 30 && village.stone >= 20) this.job = 'none';
+        } else this.moveToward(game, bestOre.x, bestOre.y, 1);
+        return;
+      }
+      this.job = 'none';
+    }
+
+    // 7) 牧师: 治疗附近受伤友军
+    if (this.job === 'priest') {
+      let healed = false;
+      forEachNear(game, this.x, this.y, 4, (o) => {
+        if (healed || o.dead || o.kingdom !== this.kingdom || o.hp >= o.maxHp * 0.9) return;
+        o.hp = Math.min(o.maxHp, o.hp + 0.15);
+        if (Math.random() < 0.3) game.addParticle(o.x, o.y - 0.5, 0, -0.05, 20, '#ffe070', 1.2);
+        healed = true;
+      });
+      if (!healed) this.wander(game, village.radius * 0.7);
+      return;
+    }
+
+    // 8) 建造者: 加速施工 (2x速度)
+    if (this.job === 'builder') {
+      const site = village.buildings.find(b => b.progress < 1);
+      if (site) {
+        const d2 = (site.x - this.x) ** 2 + (site.y - this.y) ** 2;
+        if (d2 < 2.6) {
+          site.progress += 0.025;
+          if (Math.random() < 0.15) game.addParticle(site.x + (Math.random() - .5), site.y - Math.random() * .5, 0, -0.05, 15, '#d8c890', 1);
+          if (site.progress >= 1) { completeBuilding(game, village, site); Sound.build(); }
+        } else this.moveToward(game, site.x, site.y, 1);
+        return;
+      }
+      this.job = 'none';
+    }
+
+    // 9) 建造(平民)
     const site = village.buildings.find(b => b.progress < 1);
     if (site && this.adult && this.job === 'none') {
       const d2 = (site.x - this.x) ** 2 + (site.y - this.y) ** 2;
@@ -483,7 +563,7 @@ class Unit {
       return;
     }
 
-    // 6) 日常闲逛(围绕村庄)
+    // 10) 日常闲逛(围绕村庄)
     if (!this.adult) { this.wander(game, 4); return; }
     const a = Math.random() * Math.PI * 2;
     if (this.wanderCd <= 0 || Math.hypot(this.tx - this.x, this.ty - this.y) < 0.6) {
@@ -637,6 +717,22 @@ class Village {
           }
         }
       }
+      // 职业分配: 根据村庄需求自动指派专业工种
+      const jobCounts = { builder: 0, lumberjack: 0, miner: 0, priest: 0, warrior: 0 };
+      for (const u of game.units) {
+        if (u.village === this.id && u.adult && u.job !== 'settler') {
+          jobCounts[u.job] = (jobCounts[u.job] || 0) + 1;
+        }
+      }
+      const hasForest = (() => { for (let dy = -this.radius; dy <= this.radius; dy += 2) for (let dx = -this.radius; dx <= this.radius; dx += 2) { const tx = this.cx + dx, ty = this.cy + dy; if (w.inB(tx, ty) && w.tiles[w.idx(tx, ty)] === T.FOREST) return true; } return false; })();
+      const hasOre = (() => { for (let dy = -this.radius; dy <= this.radius; dy += 2) for (let dx = -this.radius; dx <= this.radius; dx += 2) { const tx = this.cx + dx, ty = this.cy + dy; if (w.inB(tx, ty) && w.resource[w.idx(tx, ty)]) return true; } return false; })();
+      const hasQueue = this.buildings.some(b => b.progress < 1);
+      const injuredCount = game.units.filter(u => u.village === this.id && u.hp < u.maxHp * 0.6).length;
+      const idleCiv = game.units.find(u => u.village === this.id && u.adult && u.job === 'none');
+      if (idleCiv && hasQueue && jobCounts.builder < 2) idleCiv.job = 'builder';
+      else if (idleCiv && hasForest && this.wood < 40 && jobCounts.lumberjack < 1) idleCiv.job = 'lumberjack';
+      else if (idleCiv && hasOre && (this.gold < 30 || this.stone < 20) && jobCounts.miner < 1) idleCiv.job = 'miner';
+      else if (idleCiv && injuredCount >= 2 && jobCounts.priest < 1) idleCiv.job = 'priest';
       // 不满度更新
       this.tickUnrest(game);
     }

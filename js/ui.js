@@ -145,7 +145,7 @@ class UI {
       const def = RACES[obj.race];
       const k = g.kingdomById(obj.kingdom);
       const v = g.villageById(obj.village);
-      const jobName = { none: '平民', warrior: '⚔️ 战士', settler: '🚩 开拓者' }[obj.job] || obj.job;
+      const jobName = { none: '平民', warrior: '⚔️ 战士', settler: '🚩 开拓者', builder: '🏗️ 建造者', lumberjack: '🪓 伐木工', miner: '⛏️ 矿工', priest: '✨ 牧师' }[obj.job] || obj.job;
       this.$('insp-title').textContent = `${def.icon} ${obj.name}`;
       body.innerHTML = `
         <div class="row"><span class="k">种族</span><span>${def.name}${obj.adult ? '' : ' (幼年)'}</span></div>
