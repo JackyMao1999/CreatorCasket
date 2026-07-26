@@ -781,7 +781,35 @@ function damageBuilding(game, b, dmg) {
     if (v) {
       v.buildings = v.buildings.filter(x => x !== b);
       if (b.type === 'farm') removeFarmTiles(game, v, b);
-      if (b.type === 'hall') v.destroy(game);
+      if (b.type === 'hall') {
+        // 征服: 检视附近敌国战士, 尝试占领而非毁灭
+        let captorK = null;
+        forEachNear(game, b.x, b.y, 8, (u) => {
+          if (u.dead || !u.def.civ || u.job !== 'warrior' || u.kingdom === v.kingdom) return;
+          captorK = u.kingdom;
+        });
+        const oldK = game.kingdomById(v.kingdom);
+        const newK = game.kingdomById(captorK);
+        if (newK && oldK && newK !== oldK && newK.villages.length < 15) {
+          oldK.villages = oldK.villages.filter(id => id !== v.id);
+          newK.villages.push(v.id);
+          v.kingdom = newK.id;
+          v.zoneDirty = true;
+          v.unrest = 20;
+          for (const u of game.units) {
+            if (u.village === v.id) u.kingdom = newK.id;
+          }
+          game.logEvent('village', `🏴 「${v.name}」被「${newK.name}」占领了！`, newK.color);
+          Sound.war();
+          // 清理原王国若已无村庄
+          if (oldK.villages.length === 0) {
+            for (const k of game.kingdoms) { k.wars.delete(oldK.id); k.allies.delete(oldK.id); }
+            game.kingdoms = game.kingdoms.filter(k => k !== oldK);
+          }
+        } else {
+          v.destroy(game);
+        }
+      }
     }
   }
 }
