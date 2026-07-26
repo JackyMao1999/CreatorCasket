@@ -174,10 +174,10 @@ class Unit {
     if (!w.inB(x | 0, y | 0)) return 0;
     const i = w.idx(x | 0, y | 0);
     const t = w.tiles[i];
+    if (this.race === 'dragon') return 1;   // 龙飞行全通(熔岩/水陆皆可)
     if (t === T.LAVA) return 0;
     if (w.road[i]) return 1;             // 木桥: 全速通行
     if (passableT(t) && !w.fire[i]) return 1;
-    if (this.race === 'dragon') return 1;   // 龙飞行全通
     if (this.race === 'fish') return isWaterT(t) ? 1 : 0;  // 鱼仅水域
     if (!this.def.civ) return 0;          // 动物不能通行水域
     if (t === T.SHALLOW) return 0.45;     // 浅海涉水
@@ -217,7 +217,7 @@ class Unit {
       const a = Math.random() * Math.PI * 2;
       const d = Math.random() * (radius || 6);
       const nx = this.x + Math.cos(a) * d, ny = this.y + Math.sin(a) * d;
-      if (game.world.inB(nx | 0, ny | 0) && passableT(game.world.get(nx | 0, ny | 0))) {
+      if (game.world.inB(nx | 0, ny | 0) && (this.race === 'dragon' || passableT(game.world.get(nx | 0, ny | 0)))) {
         this.tx = nx; this.ty = ny;
       }
     }
@@ -255,7 +255,7 @@ class Unit {
     if (tt === T.LAVA) { this.damage(game, 2); if (this.dead) return; }
     else if (w.fire[ti]) { this.damage(game, 0.5); if (this.dead) return; }
     // 深海溺水 (文明单位游泳中, 桥上不会溺水)
-    else if (tt === T.DEEP && this.def.civ && !w.road[ti] && Math.random() < 0.25) { this.hp -= 0.015; }
+    else if (tt === T.DEEP && this.def.civ && !w.road[ti] && !this.hasBoat && Math.random() < 0.25) { this.hp -= 0.015; }
     // --- 寿命 ---
     if (this.years > this.def.lifespan && Math.random() < 0.002) { this.kill(game); return; }
     // 缓慢回血
@@ -267,8 +267,13 @@ class Unit {
 
   /* ---------- 动物AI ---------- */
   tickAnimal(game) {
-    // 鱼: 仅在水域游动+繁殖
+    // 鱼: 仅在水域游动+繁殖, 搁浅时自救
     if (this.race === 'fish') {
+      // 搁浅自救: 被龙卷风抛到陆地后跳回最近水域
+      if (!isWaterT(game.world.get(this.x | 0, this.y | 0))) {
+        const wt = game.world.nearestWater(this.x | 0, this.y | 0, 10);
+        if (wt) { this.x = wt.x + 0.5; this.y = wt.y + 0.5; }
+      }
       // 选水域目标
       if (this.wanderCd <= 0 || Math.hypot(this.tx - this.x, this.ty - this.y) < 0.6) {
         this.wanderCd = 50 + Math.random() * 100 | 0;
@@ -283,7 +288,11 @@ class Unit {
       if (this.adult && Math.random() < 0.0003) {
         let count = 0;
         for (const u of game.units) if (u.race === 'fish') count++;
-        if (count < 100) game.units.push(new Unit('fish', this.x + (Math.random() - .5), this.y + (Math.random() - .5)));
+        if (count < 100) {
+          let fx = this.x + (Math.random() - .5), fy = this.y + (Math.random() - .5);
+          if (!isWaterT(game.world.get(fx | 0, fy | 0))) { fx = this.x; fy = this.y; }
+          game.units.push(new Unit('fish', fx, fy));
+        }
       }
       return;
     }
@@ -347,6 +356,22 @@ class Unit {
   tickCiv(game) {
     const w = game.world;
 
+    // 0) 恶魔/龙近身: 平民立即逃跑(无需isHostile判定)
+    if (this.job !== 'warrior' && !this.def.animal) {
+      let predator = null, pd = 36;
+      forEachNear(game, this.x, this.y, 6, (o) => {
+        if (o.dead) return;
+        if (o.race === 'demon' || o.race === 'dragon') {
+          const d = (o.x - this.x) ** 2 + (o.y - this.y) ** 2;
+          if (d < pd) { pd = d; predator = o; }
+        }
+      });
+      if (predator) {
+        const a = Math.atan2(this.y - predator.y, this.x - predator.x);
+        this.moveToward(game, this.x + Math.cos(a) * 6, this.y + Math.sin(a) * 6, 1.4);
+        return;
+      }
+    }
     // 1) 附近的敌人: 战士迎战 / 平民逃跑
     let enemy = null, ed = 100;
     forEachNear(game, this.x, this.y, 10, (o) => {
@@ -534,7 +559,9 @@ class Village {
       if (this.pop < cap && this.food >= 12 && game.units.length < game.maxUnits) {
         this.food -= 12;
         const h = this.hall() || this.buildings[0];
-        const u = new Unit(this.race, this.cx + (Math.random() - .5) * 2, this.cy + (Math.random() - .5) * 2);
+        let sx = this.cx + (Math.random() - .5) * 2, sy = this.cy + (Math.random() - .5) * 2;
+        if (isWaterT(w.get(sx | 0, sy | 0))) { sx = this.cx; sy = this.cy; }
+        const u = new Unit(this.race, sx, sy);
         u.village = this.id; u.kingdom = this.kingdom;
         game.units.push(u);
         this.pop++;

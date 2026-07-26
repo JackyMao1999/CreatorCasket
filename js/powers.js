@@ -78,9 +78,10 @@ function spawnUnits(game, race, x, y, count) {
   let spawned = 0;
   for (let i = 0; i < count; i++) {
     if (game.units.length >= game.maxUnits) { game.toast('⚠️ 单位数量已达上限'); break; }
-    const land = w.nearestLand(Math.round(x + (Math.random() - .5) * 3), Math.round(y + (Math.random() - .5) * 3), 10);
-    if (!land) continue;
-    const u = new Unit(race, land.x + Math.random(), land.y + Math.random());
+    const place = (race === 'fish') ? w.nearestWater(Math.round(x + (Math.random() - .5) * 3), Math.round(y + (Math.random() - .5) * 3), 10)
+                                     : w.nearestLand(Math.round(x + (Math.random() - .5) * 3), Math.round(y + (Math.random() - .5) * 3), 10);
+    if (!place) continue;
+    const u = new Unit(race, place.x + Math.random(), place.y + Math.random());
     u.age = 2000; // 上帝放置的单位直接成年
     game.units.push(u);
     spawned++;

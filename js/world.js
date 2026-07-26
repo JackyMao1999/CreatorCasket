@@ -166,6 +166,22 @@ class World {
     return null;
   }
 
+  // 找最近水域, 用于鱼类搁浅自救
+  nearestWater(x, y, maxR) {
+    x |= 0; y |= 0;
+    if (this.inB(x, y) && isWaterT(this.tiles[x + y * this.w])) return { x, y };
+    for (let r = 1; r < (maxR || 20); r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const nx = x + dx, ny = y + dy;
+          if (this.inB(nx, ny) && isWaterT(this.tiles[nx + ny * this.w])) return { x: nx, y: ny };
+        }
+      }
+    }
+    return null;
+  }
+
   /* ---------- 每tick模拟 ---------- */
   tick(game) {
     const rng = this.rng;

@@ -389,11 +389,11 @@ class Renderer {
         ctx.fillStyle = '#6a4f3a'; ctx.fillRect(u.x - 0.35, u.y + 0.33, 0.7, 0.06);
         ctx.fillRect(u.x + 0.2, u.y + 0.38, 0.1, 0.04);
       }
-      // 影子
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(u.x - 0.3, u.y + 0.35, 0.6, 0.15);
-      ctx.drawImage(spr, u.x - 0.5, u.y - 0.55, 1, 1);
-      // 状态
+      // 影子(鱼和飞行龙不画)
+      if (u.race !== 'fish' && u.race !== 'dragon') {
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillRect(u.x - 0.3, u.y + 0.35, 0.6, 0.15);
+      }
       if (u.bless > 0) { ctx.fillStyle = 'rgba(255,224,112,0.8)'; ctx.fillRect(u.x - 0.1, u.y - 0.85, 0.2, 0.2); }
       if (u.plague > 0) { ctx.fillStyle = 'rgba(74,154,42,0.8)'; ctx.fillRect(u.x - 0.45, u.y - 0.5, 0.9, 0.9); }
       // 受伤血条
