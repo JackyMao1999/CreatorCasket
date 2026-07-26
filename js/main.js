@@ -134,16 +134,19 @@ const Game = {
         units: this.units.map(u => ({
           race: u.race, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, age: u.age,
           village: u.village, kingdom: u.kingdom, job: u.job, name: u.name,
-          bless: u.bless, plague: u.plague, hasBoat: u.hasBoat, weapon: u.weapon
+          bless: u.bless, plague: u.plague, hasBoat: u.hasBoat, weapon: u.weapon,
+          leader: u.leader, trait: u.trait ? u.trait.id : null
         })),
         villages: this.villages.map(v => ({
           id: v.id, name: v.name, race: v.race, kingdom: v.kingdom,
-          cx: v.cx, cy: v.cy, radius: v.radius, food: v.food, wood: v.wood, gold: v.gold, stone: v.stone, pop: v.pop, unrest: v.unrest,
+          cx: v.cx, cy: v.cy, radius: v.radius, food: v.food, wood: v.wood, gold: v.gold, stone: v.stone, iron: v.iron, pop: v.pop, unrest: v.unrest,
+          tradeRoutes: v.tradeRoutes,
           buildings: v.buildings, farmTiles: v.farmTiles,
         })),
         kingdoms: this.kingdoms.map(k => ({
           id: k.id, name: k.name, race: k.race, color: k.color,
           villages: k.villages, wars: [...k.wars], allies: [...k.allies],
+          relations: [...k.relations], ideology: k.ideology, leaderId: k.leaderId,
         })),
         cam: this.cam,
         events: this.events.slice(0, 80),
@@ -177,6 +180,7 @@ const Game = {
         const unit = new Unit(u.race, u.x, u.y);
         Object.assign(unit, u);
         unit.dead = false;
+        if (typeof unit.trait === 'string') unit.trait = LEADER_TRAITS.find(t => t.id === unit.trait) || null;
         return unit;
       });
       this.kingdoms = d.kingdoms.map(k => {
@@ -184,6 +188,9 @@ const Game = {
         Object.assign(nk, k);
         nk.wars = new Set(k.wars);
         nk.allies = new Set(k.allies || []);
+        nk.relations = new Map(k.relations || []);
+        nk.ideology = k.ideology || 'monarchy';
+        nk.leaderId = k.leaderId || 0;
         return nk;
       });
       this.villages = d.villages.map(v => {

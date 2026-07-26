@@ -145,13 +145,15 @@ class UI {
       const def = RACES[obj.race];
       const k = g.kingdomById(obj.kingdom);
       const v = g.villageById(obj.village);
-      const jobName = { none: '平民', warrior: '⚔️ 战士', settler: '🚩 开拓者', builder: '🏗️ 建造者', lumberjack: '🪓 伐木工', miner: '⛏️ 矿工', priest: '✨ 牧师' }[obj.job] || obj.job;
+      const jobName = { none: '平民', warrior: '⚔️ 战士', settler: '🚩 开拓者', builder: '🏗️ 建造者', lumberjack: '🪓 伐木工', miner: '⛏️ 矿工', priest: '✨ 牧师', trader: '📦 商人' }[obj.job] || obj.job;
       this.$('insp-title').textContent = `${def.icon} ${obj.name}`;
       body.innerHTML = `
         <div class="row"><span class="k">种族</span><span>${def.name}${obj.adult ? '' : ' (幼年)'}</span></div>
         <div class="row"><span class="k">年龄</span><span>${obj.years} 岁</span></div>
         <div class="row"><span class="k">生命</span><span>${Math.ceil(obj.hp)}/${obj.maxHp}</span></div>
         <div class="bar"><div style="width:${Math.max(0, obj.hp / obj.maxHp * 100)}%"></div></div>
+        ${obj.leader ? '<div class="row"><span class="k">身份</span><span>👑 领袖</span></div>' : ''}
+        ${obj.trait ? `<div class="row"><span class="k">特质</span><span>${obj.trait.name}</span></div>` : ''}
         ${def.civ ? `<div class="row"><span class="k">职业</span><span>${jobName}</span></div>
         <div class="row"><span class="k">武器</span><span>${WEAPONS[obj.weapon]?.name || '—'}</span></div>
         ${obj.hasBoat ? '<div class="row"><span class="k">载具</span><span>🛶 船只</span></div>' : ''}` : ''}
@@ -171,6 +173,7 @@ class UI {
         <div class="row"><span class="k">食物</span><span>${obj.food | 0}</span></div>
         <div class="row"><span class="k">木材</span><span>${obj.wood | 0}</span></div>
         <div class="row"><span class="k">金矿</span><span>${obj.gold | 0}</span> <span class="k">石矿</span><span>${obj.stone | 0}</span></div>
+        <div class="row"><span class="k">铁矿</span><span>${obj.iron | 0}</span></div>
         <div class="row"><span class="k">房屋</span><span>${houses} 🏠 / ${farms} 🌾</span></div>
         <div class="row"><span class="k">半径</span><span>${obj.radius}</span></div>
         ${k && k.wars.size ? '<div style="color:#e14b4b">⚔️ 处于战争中</div>' : ''}`;
@@ -381,9 +384,12 @@ class UI {
       else if (war) stateIcon = '⚔️';
       else if (allied) stateIcon = '🤝';
       const jumpV = vills[0];
+      const ideo = IDEOLOGIES.find(io => io.id === k.ideology) || IDEOLOGIES[0];
+      const leader = game.units.find(u => u.id === k.leaderId && !u.dead);
       return `<tr class="${war ? 'war-row' : ''}" data-cx="${jumpV ? jumpV.cx : ''}" data-cy="${jumpV ? jumpV.cy : ''}">
         <td style="color:${k.color};font-weight:bold">${k.name}</td>
         <td>${race.icon} ${race.name}</td>
+        <td>${ideo.name}</td>
         <td>${pop}</td>
         <td>${k.villages.length}</td>
         <td>${stateIcon}</td>

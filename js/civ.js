@@ -129,7 +129,7 @@ class Unit {
     this.age = 0;               // tick 计, 600 tick = 1年
     this.village = 0;           // 村庄 id
     this.kingdom = 0;           // 王国 id
-    this.job = 'none';          // none | warrior | settler | builder | lumberjack | miner | priest
+    this.job = 'none';          // none | warrior | settler | builder | lumberjack | miner | priest | trader
     this.tx = x; this.ty = y;   // 移动目标
     this.atkCd = 0;
     this.wanderCd = 0;
@@ -138,6 +138,8 @@ class Unit {
     this.plague = 0;            // 瘟疫剩余
     this.weapon = def.weapon || null;
     this.hasBoat = false;       // 船只(穿越深海)
+    this.leader = false;        // 国王/领袖
+    this.trait = null;          // 领袖特质
     this.name = NameGen.unit(race);
     this.dead = false;
   }
@@ -161,6 +163,14 @@ class Unit {
   kill(game) {
     if (this.dead) return;
     this.dead = true;
+    // 领袖死亡→继位
+    const k = this.kingdom ? game.kingdomById(this.kingdom) : null;
+    if (k && this.id === k.leaderId) {
+      const heir = game.units.find(u => u.village && game.villageById(u.village)?.kingdom === k.id && u.adult && !u.dead && u.id !== this.id);
+      if (heir) { heir.leader = true; heir.trait = pickTrait(); k.leaderId = heir.id;
+        game.logEvent('kingdom', `👑 「${k.name}」的领袖「${this.name}」战死了，「${heir.name}」继位`, k.color);
+      } else { k.leaderId = 0; }
+    }
     Sound.death();
     for (let i = 0; i < 8; i++) {
       game.addParticle(this.x, this.y, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2,
@@ -512,7 +522,8 @@ class Unit {
         if (Math.hypot(bestOre.x - this.x, bestOre.y - this.y) < 1.5) {
           const ri = w.idx(bestOre.x, bestOre.y);
           if (bestOre.type === 1) village.gold++;
-          else village.stone++;
+          else if (bestOre.type === 2) village.stone++;
+          else if (bestOre.type === 3) village.iron++;
           w.resource[ri] = 0;
           for (let i = 0; i < 4; i++) game.addParticle(bestOre.x + Math.random(), bestOre.y + Math.random() * .5, (Math.random() - .5) * .04, -0.06, 18, '#f2c14e', 1.3);
           Sound.hit();
@@ -536,7 +547,33 @@ class Unit {
       return;
     }
 
-    // 8) 建造者: 加速施工 (2x速度)
+    // 8.5) 商人: 往返于贸易路线
+    if (this.job === 'trader') {
+      const route = village.tradeRoutes.find(r => r.active !== false);
+      if (route) {
+        const targetV = game.villageById(route.target);
+        if (targetV && !targetV.dead) {
+          const d2 = (targetV.cx - this.x) ** 2 + (targetV.cy - this.y) ** 2;
+          if (d2 > 4) { this.moveToward(game, targetV.cx, targetV.cy, 1); return; }
+          // 抵达: 转移资源
+          const r = route.resource, amt = (Math.random() * 3 + 1) | 0;
+          if (r === 'wood' && game.wood > 5) { village.wood -= amt; targetV.wood += amt; }
+          else if (r === 'food' && village.food > 10) { village.food -= amt; targetV.food += amt; }
+          else if (r === 'stone' && village.stone > 3) { village.stone -= amt; targetV.stone += amt; }
+          else if (r === 'gold' && village.gold > 2) { village.gold -= amt; targetV.gold += amt; }
+          else if (r === 'iron' && village.iron > 2) { village.iron -= amt; targetV.iron += amt; }
+          // 来回: 交换起点终点
+          route._swap = !route._swap;
+          if (route._swap) { route.target = village.id; route._src = targetV.id; }
+          else { route.target = route._src; route._src = village.id; route.target = route._src === village.id ? targetV.id : route.target; }
+        }
+      }
+      if (!route || !route.active) this.job = 'none';
+      this.wander(game, village.radius * 0.6);
+      return;
+    }
+
+    // 9) 建造者: 加速施工 (2x速度)
     if (this.job === 'builder') {
       const site = village.buildings.find(b => b.progress < 1);
       if (site) {
@@ -594,6 +631,8 @@ class Village {
     this.wood = 0;            // 木材资源
     this.gold = 0;            // 金矿资源
     this.stone = 0;           // 石矿资源
+    this.iron = 0;            // 铁矿资源
+    this.tradeRoutes = [];    // [{target, resource}] 贸易路线
     this.unrest = 0;          // 不满度 0~100
     this.zoneDirty = true;
     this.tick = 0;
@@ -660,11 +699,15 @@ class Village {
       const farms = this.buildings.filter(b => b.type === 'farm').length;
       const queued = this.buildings.some(b => b.progress < 1);
       if (!queued && this.pop >= cap - 1 && houses < this.maxHouses()) {
+        if (this.wood >= 3) { this.wood -= 3;
         const spot = this.findBuildSpot(game, 2);
         if (spot) this.buildings.push({ type: 'house', x: spot.x, y: spot.y, hp: 60, maxHp: 60, progress: 0, village: this.id });
+        }
       } else if (!queued && farms < Math.max(1, (houses / 2) | 0)) {
+        if (this.wood >= 1) { this.wood -= 1;
         const spot = this.findBuildSpot(game, 2, true);
         if (spot) this.buildings.push({ type: 'farm', x: spot.x, y: spot.y, hp: 30, maxHp: 30, progress: 0, village: this.id });
+        }
       }
 
       // 半径成长
@@ -718,7 +761,7 @@ class Village {
         }
       }
       // 职业分配: 根据村庄需求自动指派专业工种
-      const jobCounts = { builder: 0, lumberjack: 0, miner: 0, priest: 0, warrior: 0 };
+      const jobCounts = { builder: 0, lumberjack: 0, miner: 0, priest: 0, warrior: 0, trader: 0 };
       for (const u of game.units) {
         if (u.village === this.id && u.adult && u.job !== 'settler') {
           jobCounts[u.job] = (jobCounts[u.job] || 0) + 1;
@@ -729,9 +772,11 @@ class Village {
       const hasQueue = this.buildings.some(b => b.progress < 1);
       const injuredCount = game.units.filter(u => u.village === this.id && u.hp < u.maxHp * 0.6).length;
       const idleCiv = game.units.find(u => u.village === this.id && u.adult && u.job === 'none');
-      if (idleCiv && hasQueue && jobCounts.builder < 2) idleCiv.job = 'builder';
+      // 商人: 有贸易路线则指派1人
+      if (idleCiv && this.tradeRoutes.length && jobCounts.trader < 1) idleCiv.job = 'trader';
+      else if (idleCiv && hasQueue && jobCounts.builder < 2) idleCiv.job = 'builder';
       else if (idleCiv && hasForest && this.wood < 40 && jobCounts.lumberjack < 1) idleCiv.job = 'lumberjack';
-      else if (idleCiv && hasOre && (this.gold < 30 || this.stone < 20) && jobCounts.miner < 1) idleCiv.job = 'miner';
+      else if (idleCiv && hasOre && (this.gold < 30 || this.stone < 20 || this.iron < 10) && jobCounts.miner < 1) idleCiv.job = 'miner';
       else if (idleCiv && injuredCount >= 2 && jobCounts.priest < 1) idleCiv.job = 'priest';
       // 不满度更新
       this.tickUnrest(game);
@@ -1011,8 +1056,32 @@ class Kingdom {
     this.villages = [];
     this.wars = new Set();
     this.allies = new Set();
+    this.relations = new Map();   // kingId→value(-100~+100)
+    this.ideology = pickIdeology();
+    this.leaderId = 0;
   }
 }
+
+/* 政体 */
+const IDEOLOGIES = [
+  { id:'monarchy',  name:'👑 君主制', warMul:1.2,  unrestDecay:0.5, peaceChance:0.08 },
+  { id:'tribal',    name:'🏕️ 部落制', warMul:1.4,  unrestDecay:0.3, peaceChance:0.05, allyMul:1.3 },
+  { id:'theocracy', name:'🕍 神权制', warMul:1.3,  unrestDecay:0.6, blessMul:2.0 },
+  { id:'republic',  name:'🏛️ 共和制', warMul:0.5,  unrestDecay:1.5, tradeMul:1.5, peaceChance:0.14 },
+  { id:'dragon',    name:'🐉 龙血帝国', warMul:1.0, unrestDecay:0.8, hpMul:1.15 },
+];
+function pickIdeology() { return IDEOLOGIES[Math.random() < 0.05 ? 4 : (Math.random() * 4) | 0]; }
+
+/* 领袖特质 */
+const LEADER_TRAITS = [
+  { id:'military',   name:'⚔️ 军事天才',   atkMul:1.3, warRate:0.04 },
+  { id:'pacifist',   name:'🕊️ 和平主义者', atkMul:0.8, warRate:0.005, peaceMul:2 },
+  { id:'builder',    name:'🏗️ 建造大师',   buildMul:1.5, woodSave:0.7 },
+  { id:'tyrant',     name:'👑 暴君',       warRate:0.04, unrestGain:0.5 },
+  { id:'visionary',  name:'🔭 远见者',     settlerRate:0.12, traderChance:0.3 },
+  { id:'dragonbane', name:'🗡️ 屠龙者',    atkMul:2.0, special:true },
+];
+function pickTrait() { return LEADER_TRAITS[(Math.random() * 6) | 0]; }
 
 /* ---------- 全局文明函数 ---------- */
 function nearestVillage(game, x, y, maxD, race) {
@@ -1065,6 +1134,11 @@ function tryFoundVillage(game, unit) {
   v.recomputeZone(game);
   game.logEvent('village', `🏠 「${v.name}」建成了!`);
   Sound.found();
+  // 为王国创建首个领袖
+  if (!kingdom.leaderId) {
+    const leader = game.units.find(u => u.village === v.id && u.adult && !u.leader);
+    if (leader) { leader.leader = true; leader.trait = pickTrait(); kingdom.leaderId = leader.id; }
+  }
   return true;
 }
 
@@ -1120,22 +1194,40 @@ function kingdomsTick(game) {
       }
       const orcWar = (A.race === 'orc' || B.race === 'orc') && A.race !== B.race;
       const atWar = A.wars.has(B.id);
+      const ideologyA = IDEOLOGIES.find(io => io.id === A.ideology) || IDEOLOGIES[0];
+      const ideologyB = IDEOLOGIES.find(io => io.id === B.ideology) || IDEOLOGIES[0];
+
+      // 关系值衰减/增长
+      if (!A.relations.has(B.id)) A.relations.set(B.id, 0);
+      let rel = A.relations.get(B.id);
+      if (!atWar && !orcWar) {
+        if (A.race === B.race && minD < 80) rel = Math.min(100, rel + 2);
+        else if (minD < 80) rel = Math.min(100, rel + 1);
+        if (A.allies.has(B.id)) rel = Math.min(100, rel + 3);
+      }
+      A.relations.set(B.id, rel);
+      if (!B.relations.has(A.id)) B.relations.set(A.id, 0);
+      B.relations.set(A.id, rel);
 
       // --- 战争宣言/议和 ---
       if (minD < 50 || (orcWar && minD < 80)) {
         if (!atWar) {
-          if (!game.settings.worldLaws?.noWar && (orcWar || Math.random() < 0.18)) {
+          const warChance = (orcWar ? 1.0 : 0.18) * ideologyA.warMul * ideologyB.warMul * (rel < -40 ? 1.5 : 1);
+          if (Math.random() < warChance && !game.settings.worldLaws?.noWar) {
             A.wars.add(B.id); B.wars.add(A.id);
             game.logEvent('war', `⚔️ 「${A.name}」向「${B.name}」宣战!`, A.color);
             Sound.war();
-            // 宣战即解除同盟(背刺)
+            A.relations.set(B.id, rel - 60);
+            B.relations.set(A.id, rel - 60);
             if (A.allies.has(B.id)) {
               A.allies.delete(B.id); B.allies.delete(B.id);
               game.logEvent('alliance', `💔 「${A.name}」背叛了与「${B.name}」的同盟！`);
             }
           }
-        } else if (!orcWar && Math.random() < 0.12) {
+        } else if (!orcWar && Math.random() < (ideologyA.peaceChance || 0.12)) {
           A.wars.delete(B.id); B.wars.delete(A.id);
+          A.relations.set(B.id, Math.min(100, (A.relations.get(B.id) || 0) + 20));
+          B.relations.set(A.id, Math.min(100, (B.relations.get(A.id) || 0) + 20));
           game.logEvent('war', `🕊️ 「${A.name}」与「${B.name}」议和了`);
         }
       }

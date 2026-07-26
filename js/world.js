@@ -132,7 +132,8 @@ class World {
         const i = x + y * w;
         const t = this.tiles[i];
         if (t === T.MOUNTAIN && rng() < 0.4) this.resource[i] = rng() < 0.5 ? 1 : 2;
-        else if (t === T.HILL && rng() < 0.15) this.resource[i] = 1;
+        else if (t === T.HILL && rng() < 0.15) this.resource[i] = 1; 
+        else if (t === T.MOUNTAIN && rng() < 0.08) this.resource[i] = 3; // 铁矿 (3=iron)
       }
     }
     this.dirty.clear();

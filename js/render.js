@@ -396,6 +396,8 @@ class Renderer {
       }
       if (u.bless > 0) { ctx.fillStyle = 'rgba(255,224,112,0.8)'; ctx.fillRect(u.x - 0.1, u.y - 0.85, 0.2, 0.2); }
       if (u.plague > 0) { ctx.fillStyle = 'rgba(74,154,42,0.8)'; ctx.fillRect(u.x - 0.45, u.y - 0.5, 0.9, 0.9); }
+      // 领袖王冠
+      if (u.leader) { ctx.fillStyle = '#ffd24a'; ctx.fillRect(u.x - 0.15, u.y - 0.75, 0.3, 0.15); ctx.fillRect(u.x - 0.05, u.y - 0.85, 0.1, 0.1); }
       // 受伤血条
       if (u.hp < u.maxHp * 0.6 && RACES[u.race].civ) {
         ctx.fillStyle = '#400';
