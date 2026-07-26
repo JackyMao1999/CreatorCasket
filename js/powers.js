@@ -241,6 +241,23 @@ const TOOLS = [
     }); }
   },
   {
+    id: 'chop', cat: 'terrain', name: '砍伐', icon: '🪓', brush: true,
+    apply(game, x, y, b) { brushTiles(game, x, y, b, (w, tx, ty, t) => {
+      if (t === T.FOREST) {
+        w.set(tx, ty, T.GRASS);
+        // 找到最近村庄获得木材
+        let bestV = null, bd = 200;
+        for (const v of game.villages) {
+          const d = (v.cx - tx) ** 2 + (v.cy - ty) ** 2;
+          if (d < bd) { bd = d; bestV = v; }
+        }
+        if (bestV && bd < 144) { bestV.wood += 2; }
+        for (let p = 0; p < 3; p++) game.addParticle(tx + Math.random(), ty + Math.random() * .5, (Math.random() - .5) * .05, -0.06, 20, '#9a7b50', 1.5);
+        Sound.hit();
+      }
+    }); }
+  },
+  {
     id: 'volcano', cat: 'terrain', name: '火山', icon: '🌋', brush: false,
     apply(game, x, y) {
       const w = game.world;

@@ -153,7 +153,8 @@ class UI {
         <div class="row"><span class="k">生命</span><span>${Math.ceil(obj.hp)}/${obj.maxHp}</span></div>
         <div class="bar"><div style="width:${Math.max(0, obj.hp / obj.maxHp * 100)}%"></div></div>
         ${def.civ ? `<div class="row"><span class="k">职业</span><span>${jobName}</span></div>
-        <div class="row"><span class="k">武器</span><span>${WEAPONS[obj.weapon]?.name || '—'}</span></div>` : ''}
+        <div class="row"><span class="k">武器</span><span>${WEAPONS[obj.weapon]?.name || '—'}</span></div>
+        ${obj.hasBoat ? '<div class="row"><span class="k">载具</span><span>🛶 船只</span></div>' : ''}` : ''}
         ${k ? `<div class="row"><span class="k">王国</span><span style="color:${k.color}">${k.name}</span></div>` : ''}
         ${v ? `<div class="row"><span class="k">村庄</span><span>${v.name}</span></div>` : ''}
         ${obj.bless > 0 ? '<div style="color:#ffe070">✨ 受到祝福</div>' : ''}
@@ -168,6 +169,7 @@ class UI {
         <div class="row"><span class="k">种族</span><span>${RACES[obj.race].icon} ${RACES[obj.race].name}</span></div>
         <div class="row"><span class="k">人口</span><span>${obj.pop}/${obj.capacity()}</span></div>
         <div class="row"><span class="k">食物</span><span>${obj.food | 0}</span></div>
+        <div class="row"><span class="k">木材</span><span>${obj.wood | 0}</span></div>
         <div class="row"><span class="k">房屋</span><span>${houses} 🏠 / ${farms} 🌾</span></div>
         <div class="row"><span class="k">半径</span><span>${obj.radius}</span></div>
         ${k && k.wars.size ? '<div style="color:#e14b4b">⚔️ 处于战争中</div>' : ''}`;

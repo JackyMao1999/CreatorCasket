@@ -129,6 +129,7 @@ class Unit {
     this.bless = 0;             // 祝福剩余
     this.plague = 0;            // 瘟疫剩余
     this.weapon = def.weapon || null;
+    this.hasBoat = false;       // 船只(穿越深海)
     this.name = NameGen.unit(race);
     this.dead = false;
   }
@@ -168,9 +169,9 @@ class Unit {
     if (t === T.LAVA) return 0;
     if (w.road[i]) return 1;             // 木桥: 全速通行
     if (passableT(t) && !w.fire[i]) return 1;
-    if (!this.def.civ) return 0;          // 动物不能游泳
-    if (t === T.SHALLOW) return 0.45;     // 浅海游泳
-    if (t === T.DEEP) return 0.22;       // 深海游泳
+    if (!this.def.civ) return 0;          // 动物不能通行水域
+    if (t === T.SHALLOW) return 0.45;     // 浅海涉水
+    if (t === T.DEEP) return this.hasBoat ? 0.6 : 0;  // 深海需船只
     return 0;
   }
   moveToward(game, tx, ty, speedMul) {
@@ -428,6 +429,7 @@ class Village {
     this.buildings = [];
     this.farmTiles = [];
     this.pop = 0;
+    this.wood = 0;            // 木材资源
     this.unrest = 0;          // 不满度 0~100
     this.zoneDirty = true;
     this.tick = 0;
@@ -517,6 +519,25 @@ class Village {
             settler.tx = land.x; settler.ty = land.y; settler.settleT = 0;
           }
         }
+      }
+      // 伐木: 领地内森林低概率砍伐
+      if (this.wood < 80 && Math.random() < 0.25) {
+        for (let tries = 0; tries < 5; tries++) {
+          const a = Math.random() * Math.PI * 2, d = 3 + Math.random() * this.radius;
+          const tx = Math.round(this.cx + Math.cos(a) * d), ty = Math.round(this.cy + Math.sin(a) * d);
+          if (w.inB(tx, ty) && w.tiles[w.idx(tx, ty)] === T.FOREST) {
+            w.set(tx, ty, T.GRASS);
+            this.wood += 1 + (Math.random() * 3 | 0);
+            // 木屑粒子
+            for (let p = 0; p < 3; p++) game.addParticle(tx + Math.random(), ty + Math.random() * .5, (Math.random() - .5) * .05, -0.06, 20, '#9a7b50', 1.5);
+            break;
+          }
+        }
+      }
+      // 造船
+      if (this.wood >= 5) {
+        const boater = game.units.find(u => u.village === this.id && u.adult && u.job !== 'warrior' && !u.hasBoat);
+        if (boater) { this.wood -= 5; boater.hasBoat = true; Sound.build(); }
       }
       // 不满度更新
       this.tickUnrest(game);

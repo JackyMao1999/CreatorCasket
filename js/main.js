@@ -132,11 +132,11 @@ const Game = {
         units: this.units.map(u => ({
           race: u.race, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, age: u.age,
           village: u.village, kingdom: u.kingdom, job: u.job, name: u.name,
-          bless: u.bless, plague: u.plague,
+          bless: u.bless, plague: u.plague, hasBoat: u.hasBoat, weapon: u.weapon
         })),
         villages: this.villages.map(v => ({
           id: v.id, name: v.name, race: v.race, kingdom: v.kingdom,
-          cx: v.cx, cy: v.cy, radius: v.radius, food: v.food, pop: v.pop,
+          cx: v.cx, cy: v.cy, radius: v.radius, food: v.food, wood: v.wood, pop: v.pop,
           buildings: v.buildings, farmTiles: v.farmTiles,
         })),
         kingdoms: this.kingdoms.map(k => ({
