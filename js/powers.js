@@ -292,6 +292,9 @@ const TOOLS = [
   { id: 'chicken', cat: 'life', name: '鸡',   icon: '🐔', brush: false, apply: (g, x, y) => spawnUnits(g, 'chicken', x, y, 4) },
   { id: 'cow',     cat: 'life', name: '牛',   icon: '🐄', brush: false, apply: (g, x, y) => spawnUnits(g, 'cow', x, y, 2) },
   { id: 'wolf',    cat: 'life', name: '狼',   icon: '🐺', brush: false, apply: (g, x, y) => spawnUnits(g, 'wolf', x, y, 2) },
+  { id: 'demon',   cat: 'life', name: '恶魔', icon: '👿', brush: false, apply: (g, x, y) => spawnUnits(g, 'demon', x, y, 1) },
+  { id: 'dragon',  cat: 'life', name: '龙',   icon: '🐉', brush: false, apply: (g, x, y) => spawnUnits(g, 'dragon', x, y, 1) },
+  { id: 'fish',    cat: 'life', name: '鱼',   icon: '🐟', brush: false, apply: (g, x, y) => spawnUnits(g, 'fish', x, y, 5) },
 
   /* ---- 灾难 ---- */
   { id: 'lightning', cat: 'destroy', name: '闪电', icon: '⚡', brush: false, drag: true, apply: (g, x, y) => lightning(g, x, y) },

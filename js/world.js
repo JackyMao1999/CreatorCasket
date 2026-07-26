@@ -256,5 +256,14 @@ class World {
         if (nearForest) this.set(x, y, T.FOREST);
       }
     }
+    // 水域自然生成鱼群
+    if (game.units.length < game.maxUnits - 10 && rng() < 0.04) {
+      const fx = (rng() * this.w) | 0, fy = (rng() * this.h) | 0;
+      if (isWaterT(this.tiles[fx + fy * this.w])) {
+        let fc = 0;
+        for (const u of game.units) if (u.race === 'fish') fc++;
+        if (fc < 80) game.units.push(new Unit('fish', fx + rng(), fy + rng()));
+      }
+    }
   }
 }

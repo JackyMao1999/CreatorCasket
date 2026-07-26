@@ -11,6 +11,9 @@ const RACES = {
   chicken: { name: '鸡',   icon: '🐔', hp: 8,   dmg: 1,  speed: 0.06,  civ: false, lifespan: 8,   skin: '#f8f0d8' },
   cow:     { name: '牛',   icon: '🐄', hp: 35,  dmg: 2,  speed: 0.04,  civ: false, lifespan: 20,  skin: '#c09060' },
   wolf:    { name: '狼',   icon: '🐺', hp: 40,  dmg: 6,  speed: 0.085, civ: false, lifespan: 14,  skin: '#8a8f9a' },
+  demon:   { name: '恶魔', icon: '👿', hp: 150, dmg: 15, speed: 0.05,  civ: false, lifespan: 300, skin: '#c04030' },
+  dragon:  { name: '龙',   icon: '🐉', hp: 400, dmg: 25, speed: 0.07,  civ: false, lifespan: 600, skin: '#40a050' },
+  fish:    { name: '鱼',   icon: '🐟', hp: 6,   dmg: 0,  speed: 0.035, civ: false, lifespan: 6,   skin: '#7098d0' },
 };
 const CIV_RACES = ['human', 'elf', 'orc', 'dwarf'];
 
@@ -58,6 +61,11 @@ function isHostile(game, a, b) {
   if (a === b) return false;
   if (a.race === 'wolf') return b.race === 'sheep' || b.race === 'chicken' || b.race === 'cow';
   if (b.race === 'wolf') return false;
+  // 恶魔与龙攻击一切活物
+  if (a.race === 'demon' || a.race === 'dragon') return b.race !== 'demon' && b.race !== 'dragon' && b.race !== 'fish';
+  if (b.race === 'demon' || b.race === 'dragon') return false; // 不主动反击但被攻击会应战(由上面处理)
+  // 鱼不攻击任何生物
+  if (a.race === 'fish') return false;
   const ra = RACES[a.race], rb = RACES[b.race];
   if (!ra.civ || !rb.civ) return false;
   if (a.race === 'orc' || b.race === 'orc') return a.race !== b.race;
@@ -169,6 +177,8 @@ class Unit {
     if (t === T.LAVA) return 0;
     if (w.road[i]) return 1;             // 木桥: 全速通行
     if (passableT(t) && !w.fire[i]) return 1;
+    if (this.race === 'dragon') return 1;   // 龙飞行全通
+    if (this.race === 'fish') return isWaterT(t) ? 1 : 0;  // 鱼仅水域
     if (!this.def.civ) return 0;          // 动物不能通行水域
     if (t === T.SHALLOW) return 0.45;     // 浅海涉水
     if (t === T.DEEP) return this.hasBoat ? 0.6 : 0;  // 深海需船只
@@ -257,6 +267,43 @@ class Unit {
 
   /* ---------- 动物AI ---------- */
   tickAnimal(game) {
+    // 鱼: 水域闲逛, 繁殖
+    if (this.race === 'fish') {
+      this.wander(game, 6);
+      if (this.adult && Math.random() < 0.0003) {
+        let count = 0;
+        for (const u of game.units) if (u.race === 'fish') count++;
+        if (count < 100) game.units.push(new Unit('fish', this.x + (Math.random() - .5), this.y + (Math.random() - .5)));
+      }
+      return;
+    }
+    // 恶魔/龙: 狩猎一切活物
+    if (this.race === 'demon' || this.race === 'dragon') {
+      let prey = null, pd = 225;
+      forEachNear(game, this.x, this.y, 15, (o) => {
+        if (o.dead || o.race === 'demon' || o.race === 'dragon') return;
+        const d = (o.x - this.x) ** 2 + (o.y - this.y) ** 2;
+        if (d < pd) { pd = d; prey = o; }
+      });
+      if (prey) {
+        const atkRange = this.race === 'dragon' ? 9 : 2; // 龙远程吐息
+        if (pd < atkRange) {
+          if (this.atkCd <= 0) {
+            this.atkCd = this.race === 'dragon' ? 35 : 30;
+            prey.damage(game, this.def.dmg);
+            // 龙吐息点燃地面
+            if (this.race === 'dragon') {
+              game.world.ignite(prey.x | 0, prey.y | 0, 180);
+              // 火焰粒子
+              for (let i = 0; i < 8; i++) game.addParticle(this.x + (Math.random() - .5), this.y + (Math.random() - .5), (prey.x - this.x) * .02, (prey.y - this.y) * .02, 15, '#f2a03d', 2);
+            }
+          }
+        } else this.moveToward(game, prey.x, prey.y, 1.2);
+        return;
+      }
+      this.wander(game, 15);
+      return;
+    }
     if (this.race === 'wolf') {
       // 寻找猎物
       let prey = null, pd = 81;

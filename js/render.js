@@ -239,6 +239,9 @@ class Renderer {
       else if (u.race === 'chicken') { ctx.fillRect(2, 3, 4, 3); ctx.fillStyle = '#e14b4b'; ctx.fillRect(4, 2, 1, 1); ctx.fillStyle = '#f2a03d'; ctx.fillRect(5, 4, 2, 1); ctx.fillStyle = '#333'; ctx.fillRect(3, 6, 1, 1); }
       else if (u.race === 'cow') { ctx.fillRect(0, 2, 7, 4); ctx.fillStyle = '#e8d8c0'; ctx.fillRect(6, 3, 2, 2); ctx.fillStyle = '#333'; ctx.fillRect(1, 6, 1, 1); ctx.fillRect(5, 6, 1, 1); }
       else if (u.race === 'wolf') { ctx.fillRect(1, 3, 6, 3); ctx.fillRect(6, 2, 2, 2); ctx.fillStyle = '#666'; ctx.fillRect(0, 2, 1, 2); ctx.fillStyle = '#333'; ctx.fillRect(2, 6, 1, 1); ctx.fillRect(5, 6, 1, 1); }
+      else if (u.race === 'demon') { ctx.fillRect(1, 1, 6, 5); ctx.fillStyle = '#e06020'; ctx.fillRect(6, 1, 2, 2); ctx.fillRect(3, 0, 2, 1); ctx.fillStyle = '#ffd040'; ctx.fillRect(4, 1, 1, 1); ctx.fillStyle = '#333'; ctx.fillRect(2, 6, 1, 1); ctx.fillRect(5, 6, 1, 1); }
+      else if (u.race === 'dragon') { ctx.fillRect(0, 2, 8, 4); ctx.fillStyle = '#3080e0'; ctx.fillRect(6, 1, 2, 2); ctx.fillRect(0, 1, 2, 1); ctx.fillStyle = '#ffd040'; ctx.fillRect(7, 2, 1, 1); ctx.fillRect(1, 5, 1, 1); ctx.fillRect(6, 5, 1, 1); }
+      else if (u.race === 'fish') { ctx.fillRect(2, 3, 4, 2); ctx.fillStyle = '#a0d0f0'; ctx.fillRect(3, 2, 2, 1); ctx.fillStyle = '#fff'; ctx.fillRect(6, 3, 1, 1); }
     }
     this.unitSprites.set(key, c);
     return c;
