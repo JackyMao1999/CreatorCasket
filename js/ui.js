@@ -384,8 +384,8 @@ class UI {
       else if (war) stateIcon = '⚔️';
       else if (allied) stateIcon = '🤝';
       const jumpV = vills[0];
-      const ideo = IDEOLOGIES.find(io => io.id === k.ideology) || IDEOLOGIES[0];
-      const leader = game.units.find(u => u.id === k.leaderId && !u.dead);
+      const ideoId = k.ideology && k.ideology.id ? k.ideology.id : k.ideology;
+      const ideo = IDEOLOGIES.find(io => io.id === ideoId) || IDEOLOGIES[0];
       return `<tr class="${war ? 'war-row' : ''}" data-cx="${jumpV ? jumpV.cx : ''}" data-cy="${jumpV ? jumpV.cy : ''}">
         <td style="color:${k.color};font-weight:bold">${k.name}</td>
         <td>${race.icon} ${race.name}</td>

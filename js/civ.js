@@ -1209,8 +1209,8 @@ function kingdomsTick(game) {
       }
       const orcWar = (A.race === 'orc' || B.race === 'orc') && A.race !== B.race;
       const atWar = A.wars.has(B.id);
-      const ideologyA = IDEOLOGIES.find(io => io.id === A.ideology) || IDEOLOGIES[0];
-      const ideologyB = IDEOLOGIES.find(io => io.id === B.ideology) || IDEOLOGIES[0];
+      const ideologyA = A.ideology && A.ideology.id ? IDEOLOGIES.find(io => io.id === A.ideology.id) || IDEOLOGIES[0] : IDEOLOGIES.find(io => io.id === A.ideology) || IDEOLOGIES[0];
+      const ideologyB = B.ideology && B.ideology.id ? IDEOLOGIES.find(io => io.id === B.ideology.id) || IDEOLOGIES[0] : IDEOLOGIES.find(io => io.id === B.ideology) || IDEOLOGIES[0];
 
       // 关系值衰减/增长
       if (!A.relations.has(B.id)) A.relations.set(B.id, 0);
