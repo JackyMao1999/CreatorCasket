@@ -148,6 +148,7 @@ const Game = {
           id: k.id, name: k.name, race: k.race, color: k.color,
           villages: k.villages, wars: [...k.wars], allies: [...k.allies],
           relations: [...k.relations], ideology: k.ideology, leaderId: k.leaderId,
+          loyalty: k.loyalty, reignStart: k.reignStart, reignHistory: k.reignHistory,
         })),
         cam: this.cam,
         events: this.events.slice(0, 80),
@@ -192,6 +193,9 @@ const Game = {
         nk.relations = new Map(k.relations || []);
         nk.ideology = k.ideology || 'monarchy';
         nk.leaderId = k.leaderId || 0;
+        nk.loyalty = k.loyalty ?? 50;
+        nk.reignStart = k.reignStart || 0;
+        nk.reignHistory = k.reignHistory || [];
         return nk;
       });
       this.villages = d.villages.map(v => {

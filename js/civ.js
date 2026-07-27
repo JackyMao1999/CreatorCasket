@@ -163,13 +163,20 @@ class Unit {
   kill(game) {
     if (this.dead) return;
     this.dead = true;
-    // 领袖死亡→继位
+    // 领袖死亡→继位 + 历史记录 + 忠诚度冲击
     const k = this.kingdom ? game.kingdomById(this.kingdom) : null;
     if (k && this.id === k.leaderId) {
+      // 记录在位历史
+      k.reignHistory.push({ name: this.name, trait: this.trait ? this.trait.id : null, startTick: k.reignStart, endTick: game.tick });
+      k.loyalty = Math.max(0, k.loyalty - 15);
       const heir = game.units.find(u => u.village && game.villageById(u.village)?.kingdom === k.id && u.adult && !u.dead && u.id !== this.id);
-      if (heir) { heir.leader = true; heir.trait = pickTrait(game.world.rng); k.leaderId = heir.id;
+      if (heir) { heir.leader = true; heir.trait = pickTrait(game.world.rng); heir.job = 'none'; k.leaderId = heir.id; k.reignStart = game.tick;
+        // 新领袖: 忠诚度部分恢复 + 全境不满冲击
+        for (const vid of k.villages) { const v = game.villageById(vid); if (v) v.unrest = Math.min(100, v.unrest + 10); }
         game.logEvent('kingdom', `👑 「${k.name}」的领袖「${this.name}」战死了，「${heir.name}」继位`, k.color);
-      } else { k.leaderId = 0; }
+      } else { k.leaderId = 0; k.reignStart = 0;
+        game.logEvent('kingdom', `💀 「${k.name}」的领袖「${this.name}」陨落，王国陷入无主状态！`, k.color);
+      }
     }
     Sound.death();
     for (let i = 0; i < 8; i++) {
@@ -393,8 +400,8 @@ class Unit {
 
     const kingdom = game.kingdomById(this.kingdom);
     const atWar = kingdomAtWar(game, kingdom);
-    // 战时成为战士
-    if (this.adult && atWar && this.job === 'none' && Math.random() < 0.02) this.job = 'warrior';
+    // 战时成为战士 (领袖不上前线)
+    if (this.adult && atWar && this.job === 'none' && !this.leader && Math.random() < 0.02) this.job = 'warrior';
     if (!atWar && this.job === 'warrior') this.job = 'none';
 
     if (enemy) {
@@ -405,6 +412,8 @@ class Unit {
           if (this.atkCd <= 0) {
             this.atkCd = wpn.cd;
             let dmg = this.def.dmg * wpn.dmgMul * (this.bless > 0 ? 1.6 : 1) * (0.7 + Math.random() * 0.6);
+            // 领袖基础伤害加成
+            if (this.leader) dmg *= 1.3;
             // 领袖特质
             const trait = getLeaderTrait(game, kingdom);
             if (trait && trait.atkMul) dmg *= trait.atkMul;
@@ -769,17 +778,26 @@ class Village {
           }
         }
       }
-      // 职业分配: 根据村庄需求自动指派专业工种
-      const jobCounts = { builder: 0, lumberjack: 0, miner: 0, priest: 0, warrior: 0, trader: 0 };
-      for (const u of this.units) {
-        if (u.adult && u.job !== 'settler') {
-          jobCounts[u.job] = (jobCounts[u.job] || 0) + 1;
-        }
-      }
       const hasForest = (() => { for (let dy = -this.radius; dy <= this.radius; dy += 2) for (let dx = -this.radius; dx <= this.radius; dx += 2) { const tx = this.cx + dx, ty = this.cy + dy; if (w.inB(tx, ty) && w.tiles[w.idx(tx, ty)] === T.FOREST) return true; } return false; })();
       const hasOre = (() => { for (let dy = -this.radius; dy <= this.radius; dy += 2) for (let dx = -this.radius; dx <= this.radius; dx += 2) { const tx = this.cx + dx, ty = this.cy + dy; if (w.inB(tx, ty) && w.resource[w.idx(tx, ty)]) return true; } return false; })();
       const hasQueue = this.buildings.some(b => b.progress < 1);
       const injuredCount = this.units.filter(u => u.hp < u.maxHp * 0.6).length;
+      // 职业分配: 先清除不再需要的固定职业，再指派新工种
+      for (const u of this.units) {
+        if (u.adult && !u.leader && u.job !== 'none' && u.job !== 'warrior' && u.job !== 'settler') {
+          if (u.job === 'builder' && !hasQueue) u.job = 'none';
+          if (u.job === 'lumberjack' && (!hasForest || this.wood >= 60)) u.job = 'none';
+          if (u.job === 'miner' && (!hasOre || (this.gold >= 30 && this.stone >= 20))) u.job = 'none';
+          if (u.job === 'priest' && injuredCount < 2) u.job = 'none';
+          if (u.job === 'trader' && !this.tradeRoutes.length) u.job = 'none';
+        }
+      }
+      const jobCounts = { builder: 0, lumberjack: 0, miner: 0, priest: 0, warrior: 0, trader: 0 };
+      for (const u of this.units) {
+        if (u.adult && !u.leader && u.job !== 'settler') {
+          jobCounts[u.job] = (jobCounts[u.job] || 0) + 1;
+        }
+      }
       const idleCiv = this.units.find(u => u.adult && u.job === 'none');
       // 商人: 有贸易路线则指派1人
       if (idleCiv && this.tradeRoutes.length && jobCounts.trader < 1
@@ -809,6 +827,11 @@ class Village {
     if (hasPlague) delta += 2.5;
     const kingdom = game.kingdomById(this.kingdom);
     if (kingdom && kingdomAtWar(game, kingdom)) delta += 0.6;
+    if (kingdom) {
+      const loyaltyMul = 1 - (kingdom.loyalty || 50) / 200;  // 忠诚度越高不满衰减越快
+      delta *= loyaltyMul;
+      if (kingdom.loyalty < 30) delta += 0.3;  // 低忠诚额外不满
+    }
     const ktrait = getLeaderTrait(game, kingdom);
     if (ktrait && ktrait.unrestGain) delta += ktrait.unrestGain;
     this.unrest = Math.max(0, Math.min(100, this.unrest + delta));
@@ -1068,6 +1091,9 @@ class Kingdom {
     this.relations = new Map();   // kingId→value(-100~+100)
     this.ideology = pickIdeology(rng);
     this.leaderId = 0;
+    this.loyalty = 50;           // 忠诚度 0~100
+    this.reignStart = 0;         // 当前领袖即位tick
+    this.reignHistory = [];      // [{name, trait, startTick, endTick}]
   }
 }
 
@@ -1146,7 +1172,7 @@ function tryFoundVillage(game, unit) {
   // 为王国创建首个领袖
   if (!kingdom.leaderId) {
     const leader = game.units.find(u => u.village === v.id && u.adult && !u.leader);
-    if (leader) { leader.leader = true; leader.trait = pickTrait(game.world.rng); kingdom.leaderId = leader.id; }
+    if (leader) { leader.leader = true; leader.maxHp *= 1.5; leader.hp = leader.maxHp; leader.job = 'none'; leader.trait = pickTrait(game.world.rng); kingdom.leaderId = leader.id; kingdom.reignStart = game.tick; }
   }
   return true;
 }
@@ -1232,7 +1258,8 @@ function kingdomsTick(game) {
           const traitA = getLeaderTrait(game, A);
           const traitB = getLeaderTrait(game, B);
           const warChance = (orcWar ? 1.0 : 0.18) * ideologyA.warMul * ideologyB.warMul * (rel < -40 ? 1.5 : 1)
-            * (traitA && traitA.warRate ? traitA.warRate / 0.04 : 1) * (traitB && traitB.warRate ? traitB.warRate / 0.04 : 1);
+            * (traitA && traitA.warRate ? traitA.warRate / 0.04 : 1) * (traitB && traitB.warRate ? traitB.warRate / 0.04 : 1)
+            * (A.loyalty > 70 ? 0.8 : 1);  // 高忠诚王国好战性降低
           if (game.world.rng() < warChance && !game.settings.worldLaws?.noWar) {
             A.wars.add(B.id); B.wars.add(A.id);
             game.logEvent('war', `⚔️ 「${A.name}」向「${B.name}」宣战!`, A.color);
@@ -1263,10 +1290,11 @@ function kingdomsTick(game) {
         }
       }
 
-      // --- 同盟瓦解 (无共同敌人且异族, 概率断交) ---
+      // --- 同盟瓦解 (无共同敌人且异族, 概率断交。低忠诚加速瓦解) ---
       if (A.allies.has(B.id)) {
         const hasCommon = [...A.wars].some(w => B.wars.has(w));
-        if (!hasCommon && A.race !== B.race && game.world.rng() < 0.15) {
+        const breakChance = 0.15 + (A.loyalty < 30 ? 0.25 : 0) + (B.loyalty < 30 ? 0.25 : 0);
+        if (!hasCommon && A.race !== B.race && game.world.rng() < breakChance) {
           A.allies.delete(B.id); B.allies.delete(B.id);
           game.logEvent('alliance', `💔 「${A.name}」与「${B.name}」的同盟破裂了`);
         }
@@ -1298,6 +1326,11 @@ function civTick(game) {
   }
   for (const v of game.villages) v.tickVillage(game);
   if (game.villages.some(v => v.dead)) game.villages = game.villages.filter(v => !v.dead);
+  // 忠诚度自然漂移
+  for (const k of game.kingdoms) {
+    if (k.leaderId) k.loyalty = Math.min(100, k.loyalty + 0.03);
+    else k.loyalty = Math.max(0, k.loyalty - 0.05);
+  }
   if (game.tick % 150 === 0) kingdomsTick(game);
   // 每60 tick统计人口
   if (game.tick % 60 === 0) {
