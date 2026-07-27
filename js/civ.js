@@ -217,9 +217,9 @@ class Unit {
     const sp = this.def.speed * (speedMul || 1) * (this.bless > 0 ? 1.4 : 1) * (this.adult ? 1 : 0.6);
     dx /= dist; dy /= dist;
     const baseDir = Math.atan2(dy, dx);
-    const jitter = (this.id * 7 + game.tick) % 10 / 100;  // 0.00~0.09 每单位小幅偏移破解对称
-    const last = this._lastMoveAng || jitter;
-    for (const ang of [0, last + jitter, 0.3 + jitter, -0.3 + jitter, 0.6 + jitter, -0.6 + jitter]) {
+    const off = (this.id * 0.13737) % 1 * 0.08;  // 单位终生固定偏移，路径稳定
+    const last = this._lastMoveAng || off;
+    for (const ang of [0, last + off, 0.5 + off, -0.5 + off, 0.9 + off, -0.9 + off]) {
       const a = baseDir + ang;
       const cx = Math.cos(a), cy = Math.sin(a);
       const nx = this.x + cx * sp, ny = this.y + cy * sp;
