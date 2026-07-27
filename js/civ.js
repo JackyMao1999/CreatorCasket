@@ -129,7 +129,7 @@ class Unit {
     this.age = 0;               // tick 计, 600 tick = 1年
     this.village = 0;           // 村庄 id
     this.kingdom = 0;           // 王国 id
-    this.job = 'none';          // none | warrior | settler | builder | lumberjack | miner | priest | trader
+     this.job = 'none';          // leader | none | warrior | settler | builder | lumberjack | miner | priest | trader
     this.tx = x; this.ty = y;   // 移动目标
     this.atkCd = 0;
     this.wanderCd = 0;
@@ -170,7 +170,7 @@ class Unit {
       k.reignHistory.push({ name: this.name, trait: this.trait ? this.trait.id : null, startTick: k.reignStart, endTick: game.tick });
       k.loyalty = Math.max(0, k.loyalty - 15);
       const heir = game.units.find(u => u.village && game.villageById(u.village)?.kingdom === k.id && u.adult && !u.dead && u.id !== this.id);
-      if (heir) { heir.leader = true; heir.trait = pickTrait(game.world.rng); heir.job = 'none'; k.leaderId = heir.id; k.reignStart = game.tick;
+      if (heir) { heir.leader = true; heir.trait = pickTrait(game.world.rng); heir.job = 'leader'; k.leaderId = heir.id; k.reignStart = game.tick;
         // 新领袖: 忠诚度部分恢复 + 全境不满冲击
         for (const vid of k.villages) { const v = game.villageById(vid); if (v) v.unrest = Math.min(100, v.unrest + 10); }
         game.logEvent('kingdom', `👑 「${k.name}」的领袖「${this.name}」战死了，「${heir.name}」继位`, k.color);
@@ -400,14 +400,14 @@ class Unit {
 
     const kingdom = game.kingdomById(this.kingdom);
     const atWar = kingdomAtWar(game, kingdom);
-    // 战时成为战士 (领袖不上前线)
-    if (this.adult && atWar && this.job === 'none' && !this.leader && Math.random() < 0.02) this.job = 'warrior';
+    // 战时成为战士 (领袖不参战)
+    if (this.adult && atWar && this.job === 'none' && Math.random() < 0.02) this.job = 'warrior';
     if (!atWar && this.job === 'warrior') this.job = 'none';
 
     if (enemy) {
       const wpn = WEAPONS[this.weapon] || WEAPONS.sword;
       const range2 = wpn.range * wpn.range;
-      if (this.job === 'warrior' || (this.adult && ed < 4 && this.race === 'orc')) {
+      if (this.job === 'warrior' || this.leader || (this.adult && ed < 4 && this.race === 'orc')) {
         if (ed < range2) {
           if (this.atkCd <= 0) {
             this.atkCd = wpn.cd;
@@ -443,6 +443,13 @@ class Unit {
         this.moveToward(game, this.x + Math.cos(a) * 5, this.y + Math.sin(a) * 5, 1.3);
         return;
       }
+    }
+
+    // 0.5) 领袖: 在领地巡视, 不参与体力劳动
+    if (this.leader) {
+      const v = this.village ? game.villageById(this.village) : null;
+      this.wander(game, v ? v.radius * 0.5 : 8);
+      return;
     }
 
     // 2) 开拓者: 前往新地建村
@@ -782,9 +789,9 @@ class Village {
       const hasOre = (() => { for (let dy = -this.radius; dy <= this.radius; dy += 2) for (let dx = -this.radius; dx <= this.radius; dx += 2) { const tx = this.cx + dx, ty = this.cy + dy; if (w.inB(tx, ty) && w.resource[w.idx(tx, ty)]) return true; } return false; })();
       const hasQueue = this.buildings.some(b => b.progress < 1);
       const injuredCount = this.units.filter(u => u.hp < u.maxHp * 0.6).length;
-      // 职业分配: 先清除不再需要的固定职业，再指派新工种
+      // 职业分配: 先清除不再需要的固定职业，再指派新工种 (领袖不参与)
       for (const u of this.units) {
-        if (u.adult && !u.leader && u.job !== 'none' && u.job !== 'warrior' && u.job !== 'settler') {
+        if (u.adult && u.job !== 'leader' && u.job !== 'none' && u.job !== 'warrior' && u.job !== 'settler') {
           if (u.job === 'builder' && !hasQueue) u.job = 'none';
           if (u.job === 'lumberjack' && (!hasForest || this.wood >= 60)) u.job = 'none';
           if (u.job === 'miner' && (!hasOre || (this.gold >= 30 && this.stone >= 20))) u.job = 'none';
@@ -794,7 +801,7 @@ class Village {
       }
       const jobCounts = { builder: 0, lumberjack: 0, miner: 0, priest: 0, warrior: 0, trader: 0 };
       for (const u of this.units) {
-        if (u.adult && !u.leader && u.job !== 'settler') {
+        if (u.adult && u.job !== 'leader' && u.job !== 'settler') {
           jobCounts[u.job] = (jobCounts[u.job] || 0) + 1;
         }
       }
@@ -1172,7 +1179,7 @@ function tryFoundVillage(game, unit) {
   // 为王国创建首个领袖
   if (!kingdom.leaderId) {
     const leader = game.units.find(u => u.village === v.id && u.adult && !u.leader);
-    if (leader) { leader.leader = true; leader.maxHp *= 1.5; leader.hp = leader.maxHp; leader.job = 'none'; leader.trait = pickTrait(game.world.rng); kingdom.leaderId = leader.id; kingdom.reignStart = game.tick; }
+    if (leader) { leader.leader = true; leader.maxHp *= 1.5; leader.hp = leader.maxHp; leader.job = 'leader'; leader.trait = pickTrait(game.world.rng); kingdom.leaderId = leader.id; kingdom.reignStart = game.tick; }
   }
   return true;
 }
