@@ -789,30 +789,47 @@ class Village {
       const hasOre = (() => { for (let dy = -this.radius; dy <= this.radius; dy += 2) for (let dx = -this.radius; dx <= this.radius; dx += 2) { const tx = this.cx + dx, ty = this.cy + dy; if (w.inB(tx, ty) && w.resource[w.idx(tx, ty)]) return true; } return false; })();
       const hasQueue = this.buildings.some(b => b.progress < 1);
       const injuredCount = this.units.filter(u => u.hp < u.maxHp * 0.6).length;
-      // 职业分配: 先清除不再需要的固定职业，再指派新工种 (领袖不参与)
-      for (const u of this.units) {
-        if (u.adult && u.job !== 'leader' && u.job !== 'none' && u.job !== 'warrior' && u.job !== 'settler') {
-          if (u.job === 'builder' && !hasQueue) u.job = 'none';
-          if (u.job === 'lumberjack' && (!hasForest || this.wood >= 60)) u.job = 'none';
-          if (u.job === 'miner' && (!hasOre || (this.gold >= 30 && this.stone >= 20))) u.job = 'none';
-          if (u.job === 'priest' && injuredCount < 2) u.job = 'none';
-          if (u.job === 'trader' && !this.tradeRoutes.length) u.job = 'none';
-        }
-      }
-      const jobCounts = { builder: 0, lumberjack: 0, miner: 0, priest: 0, warrior: 0, trader: 0 };
+      // 职业需求评估 + 分配 (领袖/战士/拓荒者不参与经济职业)
+      const needBuilder = hasQueue ? 2 : 0;
+      const needLumber = (hasForest && this.wood < 40) ? 1 : 0;
+      const needMiner = (hasOre && (this.gold < 30 || this.stone < 20 || this.iron < 10)) ? 1 : 0;
+      const needPriest = injuredCount >= 2 ? 1 : 0;
+      const needTrader = this.tradeRoutes.length ? 1 : 0;
+      const jobCounts = { builder: 0, lumberjack: 0, miner: 0, priest: 0, trader: 0, warrior: 0 };
       for (const u of this.units) {
         if (u.adult && u.job !== 'leader' && u.job !== 'settler') {
           jobCounts[u.job] = (jobCounts[u.job] || 0) + 1;
         }
       }
-      const idleCiv = this.units.find(u => u.adult && u.job === 'none');
-      // 商人: 有贸易路线则指派1人
-      if (idleCiv && this.tradeRoutes.length && jobCounts.trader < 1
-        && game.world.rng() < (ktrait && ktrait.traderChance ? ktrait.traderChance / 0.3 * 0.5 : 0.5)) idleCiv.job = 'trader';
-      else if (idleCiv && hasQueue && jobCounts.builder < 2) idleCiv.job = 'builder';
-      else if (idleCiv && hasForest && this.wood < 40 && jobCounts.lumberjack < 1) idleCiv.job = 'lumberjack';
-      else if (idleCiv && hasOre && (this.gold < 30 || this.stone < 20 || this.iron < 10) && jobCounts.miner < 1) idleCiv.job = 'miner';
-      else if (idleCiv && injuredCount >= 2 && jobCounts.priest < 1) idleCiv.job = 'priest';
+      // 尝试将单位分配到指定职业
+      const tryAssign = (u) => {
+        if (needBuilder > jobCounts.builder) { u.job = 'builder'; jobCounts.builder++; return true; }
+        if (needLumber > jobCounts.lumberjack) { u.job = 'lumberjack'; jobCounts.lumberjack++; return true; }
+        if (needMiner > jobCounts.miner) { u.job = 'miner'; jobCounts.miner++; return true; }
+        if (needPriest > jobCounts.priest) { u.job = 'priest'; jobCounts.priest++; return true; }
+        if (needTrader > jobCounts.trader && game.world.rng() < (ktrait && ktrait.traderChance ? ktrait.traderChance / 0.3 * 0.5 : 0.5)) { u.job = 'trader'; jobCounts.trader++; return true; }
+        return false;
+      };
+      // 溢价清除→转岗: 职业不再需要的单位优先转岗，转不了才变平民
+      for (const u of this.units) {
+        if (!u.adult || u.job === 'leader' || u.job === 'warrior' || u.job === 'settler') continue;
+        let obsolete = false;
+        if (u.job === 'builder' && jobCounts.builder > needBuilder) obsolete = true;
+        if (u.job === 'lumberjack' && jobCounts.lumberjack > needLumber) obsolete = true;
+        if (u.job === 'miner' && jobCounts.miner > needMiner) obsolete = true;
+        if (u.job === 'priest' && jobCounts.priest > needPriest) obsolete = true;
+        if (u.job === 'trader' && jobCounts.trader > needTrader) obsolete = true;
+        if (obsolete) {
+          jobCounts[u.job]--;
+          if (!tryAssign(u)) u.job = 'none';
+        }
+      }
+      // 闲置分配: 每次最多指派 2 人
+      let assigned = 0;
+      for (const u of this.units) {
+        if (assigned >= 2) break;
+        if (u.adult && u.job === 'none' && tryAssign(u)) assigned++;
+      }
       // 不满度更新
       this.tickUnrest(game);
     }

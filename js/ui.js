@@ -145,7 +145,7 @@ class UI {
       const def = RACES[obj.race];
       const k = g.kingdomById(obj.kingdom);
       const v = g.villageById(obj.village);
-      const jobName = { none: '平民', warrior: '⚔️ 战士', settler: '🚩 开拓者', builder: '🏗️ 建造者', lumberjack: '🪓 伐木工', miner: '⛏️ 矿工', priest: '✨ 牧师', trader: '📦 商人' }[obj.job] || obj.job;
+      const jobName = { leader: '👑 领袖', none: '平民', warrior: '⚔️ 战士', settler: '🚩 开拓者', builder: '🏗️ 建造者', lumberjack: '🪓 伐木工', miner: '⛏️ 矿工', priest: '✨ 牧师', trader: '📦 商人' }[obj.job] || obj.job;
       this.$('insp-title').textContent = `${def.icon} ${obj.name}`;
       body.innerHTML = `
         <div class="row"><span class="k">种族</span><span>${def.name}${obj.adult ? '' : ' (幼年)'}</span></div>
@@ -154,9 +154,9 @@ class UI {
         <div class="bar"><div style="width:${Math.max(0, obj.hp / obj.maxHp * 100)}%"></div></div>
         ${obj.leader ? '<div class="row"><span class="k">身份</span><span>👑 领袖</span></div>' : ''}
         ${obj.trait ? `<div class="row"><span class="k">特质</span><span>${obj.trait.name}</span></div>` : ''}
-        ${def.civ ? `<div class="row"><span class="k">职业</span><span>${jobName}</span></div>
-        <div class="row"><span class="k">武器</span><span>${WEAPONS[obj.weapon]?.name || '—'}</span></div>
-        ${obj.hasBoat ? '<div class="row"><span class="k">载具</span><span>🛶 船只</span></div>' : ''}` : ''}
+         ${def.civ ? `<div class="row"><span class="k">职业</span><span>${jobName}</span></div>
+         ${(obj.job === 'warrior' || obj.leader) ? `<div class="row"><span class="k">武器</span><span>${WEAPONS[obj.weapon]?.name || '—'}</span></div>` : ''}
+         ${obj.hasBoat ? '<div class="row"><span class="k">载具</span><span>🛶 船只</span></div>' : ''}` : ''}
         ${k ? `<div class="row"><span class="k">王国</span><span style="color:${k.color}">${k.name}</span></div>` : ''}
         ${v ? `<div class="row"><span class="k">村庄</span><span>${v.name}</span></div>` : ''}
         ${obj.bless > 0 ? '<div style="color:#ffe070">✨ 受到祝福</div>' : ''}
