@@ -225,7 +225,8 @@ class Unit {
     if (this.wanderCd <= 0 || arrived) {
       this.wanderCd = 60 + Math.random() * 120 | 0;
       const a = Math.random() * Math.PI * 2;
-      const d = Math.random() * (radius || 6);
+      const r = (radius || 6);
+      const d = 1.5 + Math.random() * Math.max(0, r - 1.5);
       const nx = this.x + Math.cos(a) * d, ny = this.y + Math.sin(a) * d;
       if (game.world.inB(nx | 0, ny | 0) && (this.race === 'dragon' || passableT(game.world.get(nx | 0, ny | 0)))) {
         this.tx = nx; this.ty = ny;
@@ -611,7 +612,8 @@ class Unit {
     const a = Math.random() * Math.PI * 2;
     if (this.wanderCd <= 0 || Math.hypot(this.tx - this.x, this.ty - this.y) < 0.6) {
       this.wanderCd = 80 + Math.random() * 150 | 0;
-      const d = Math.random() * village.radius * 0.8;
+      const r = village.radius * 0.8;
+      const d = 1.5 + Math.random() * Math.max(0, r - 1.5);
       const nx = village.cx + Math.cos(a) * d, ny = village.cy + Math.sin(a) * d;
       if (w.inB(nx | 0, ny | 0) && passableT(w.get(nx | 0, ny | 0))) { this.tx = nx; this.ty = ny; }
     }
