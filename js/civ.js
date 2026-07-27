@@ -142,6 +142,7 @@ class Unit {
     this.trait = null;          // 领袖特质
     this.name = NameGen.unit(race);
     this.dead = false;
+    this._lastMoveAng = 0;       // 移动动量: 上tick成功的方向角
   }
 
   get def() { return RACES[this.race]; }
@@ -194,7 +195,14 @@ class Unit {
     if (this.race === 'dragon') return 1;   // 龙飞行全通(熔岩/水陆皆可)
     if (t === T.LAVA) return 0;
     if (w.road[i]) return 1;             // 木桥: 全速通行
-    if (passableT(t) && !w.fire[i]) return 1;
+    if (passableT(t) && !w.fire[i]) {
+      // 单位密度惩罚: 拥挤处越难通行，自然分散
+      const cell = game._spatial?.get(((x | 0) / 4 | 0) + ',' + ((y | 0) / 4 | 0));
+      const crowd = cell ? cell.length : 0;
+      if (crowd > 3) return 0.3;
+      if (crowd > 1) return 0.7;
+      return 1;
+    }
     if (this.race === 'fish') return isWaterT(t) ? 1 : 0;  // 鱼仅水域
     if (!this.def.civ) return 0;          // 动物不能通行水域
     if (t === T.SHALLOW) return 0.45;     // 浅海涉水
@@ -209,7 +217,9 @@ class Unit {
     const sp = this.def.speed * (speedMul || 1) * (this.bless > 0 ? 1.4 : 1) * (this.adult ? 1 : 0.6);
     dx /= dist; dy /= dist;
     const baseDir = Math.atan2(dy, dx);
-    for (const ang of [0, 0.7, -0.7, 1.4, -1.4, Math.PI / 2, -Math.PI / 2]) {
+    const jitter = (this.id * 7 + game.tick) % 10 / 100;  // 0.00~0.09 每单位小幅偏移破解对称
+    const last = this._lastMoveAng || jitter;
+    for (const ang of [0, last + jitter, 0.3 + jitter, -0.3 + jitter, 0.6 + jitter, -0.6 + jitter]) {
       const a = baseDir + ang;
       const cx = Math.cos(a), cy = Math.sin(a);
       const nx = this.x + cx * sp, ny = this.y + cy * sp;
@@ -217,6 +227,7 @@ class Unit {
       if (tm > 0) {
         const ms = sp * tm;
         this.x += cx * ms; this.y += cy * ms;
+        this._lastMoveAng = ang;  // 记住成功方向
         if (tm < 1 && Math.random() < 0.5) { Sound.water(); game.addParticle(
           this.x + (Math.random() - .5) * .4, this.y + .35,
           (Math.random() - .5) * .04, -0.04, 18, '#a0d8f0', 1.3); }
@@ -228,7 +239,7 @@ class Unit {
 
   wander(game, radius) {
     if (this.wanderCd > 0) { this.wanderCd--; }
-    const arrived = Math.hypot(this.tx - this.x, this.ty - this.y) < 0.6;
+    const arrived = Math.hypot(this.tx - this.x, this.ty - this.y) < 0.8;
     if (this.wanderCd <= 0 || arrived) {
       this.wanderCd = 60 + Math.random() * 120 | 0;
       const a = Math.random() * Math.PI * 2;
@@ -239,7 +250,11 @@ class Unit {
         this.tx = nx; this.ty = ny;
       }
     }
-    this.moveToward(game, this.tx, this.ty, 0.7);
+    if (!this.moveToward(game, this.tx, this.ty, 0.9)) {
+      // 所有方向均被阻挡 → 强制下次重选目标
+      this.wanderCd = 0;
+    }
+    return false;
   }
 
   tick(game) {
@@ -626,7 +641,7 @@ class Unit {
     // 10) 日常闲逛(围绕村庄)
     if (!this.adult) { this.wander(game, 4); return; }
     const a = Math.random() * Math.PI * 2;
-    if (this.wanderCd <= 0 || Math.hypot(this.tx - this.x, this.ty - this.y) < 0.6) {
+    if (this.wanderCd <= 0 || Math.hypot(this.tx - this.x, this.ty - this.y) < 0.8) {
       this.wanderCd = 80 + Math.random() * 150 | 0;
       const r = village.radius * 0.8;
       const d = 1.5 + Math.random() * Math.max(0, r - 1.5);
@@ -634,7 +649,7 @@ class Unit {
       if (w.inB(nx | 0, ny | 0) && passableT(w.get(nx | 0, ny | 0))) { this.tx = nx; this.ty = ny; }
     }
     if (this.wanderCd > 0) this.wanderCd--;
-    this.moveToward(game, this.tx, this.ty, 0.65);
+    if (!this.moveToward(game, this.tx, this.ty, 0.9)) { this.wanderCd = 0; }
   }
 }
 
