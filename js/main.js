@@ -104,6 +104,7 @@ const Game = {
     this.cam.zoom = Math.max(0.8, Math.min(window.innerWidth, window.innerHeight) / (size * TILE) * 1.2);
     this.renderer.allocMapCaches();
     this.renderer.unitSprites.clear();
+    NameGen._r = this.world.rng;  // 使用世界种子 PRNG 确保名称可重现
     // 初始生命
     for (let g = 0; g < 3; g++) {
       const p = this.world.randLandPos(null, true);
@@ -210,6 +211,7 @@ const Game = {
       if (d.cam) this.cam = d.cam;
       this.renderer.allocMapCaches();
       this.renderer.unitSprites.clear();
+      NameGen._r = this.world.rng;
       for (const v of this.villages) v.recomputeZone(this);
       this.toast('📂 世界已读取!');
     } catch (e) {

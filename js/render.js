@@ -138,7 +138,7 @@ class Renderer {
     if (w.overlayDirty) this.rebuildOverlay();
   }
 
-  /* ---------- 覆盖层: 领地/道路/农田 ---------- */
+  /* ---------- 覆盖层: 领地/道路 (农田在 draw() 中实时绘制) ---------- */
   rebuildOverlay() {
     const w = this.game.world;
     const game = this.game;
@@ -182,18 +182,6 @@ class Renderer {
           } else {
             ctx.fillStyle = '#9a7b50'; ctx.fillRect(x * TILE + 1, y * TILE + 1, TILE - 2, TILE - 2);
             ctx.fillStyle = '#b08d5c'; ctx.fillRect(x * TILE + 2, y * TILE + 2, TILE - 4, TILE - 4);
-          }
-        }
-        // 农田
-        const f = w.farm[i];
-        if (f) {
-          ctx.fillStyle = '#6a4526'; ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
-          const cropColor = f <= 2 ? '#7a9a3a' : f <= 4 ? '#8ec44a' : '#e8c84a';
-          ctx.fillStyle = cropColor;
-          for (let r = 1; r < TILE; r += 2) {
-            for (let px = 1; px < TILE - 1; px += 2) {
-              if ((px + r + x + y) % 3 || f >= 3) ctx.fillRect(x * TILE + px, y * TILE + r, 1, 1);
-            }
           }
         }
       }
@@ -326,6 +314,26 @@ class Renderer {
     // 覆盖层
     ctx.drawImage(this.overlayCache, vx0 * TILE, vy0 * TILE, (vx1 - vx0) * TILE, (vy1 - vy0) * TILE,
       vx0, vy0, vx1 - vx0, vy1 - vy0);
+
+    // 农田(实时绘制, 不依赖 overlay cache)
+    for (const v of game.villages) {
+      if (v.dead) continue;
+      for (const fi of v.farmTiles) {
+        const fy = (fi / w.w) | 0, fx = fi % w.w;
+        if (fx < vx0 || fx > vx1 || fy < vy0 || fy > vy1) continue;
+        const f = w.farm[fi];
+        if (!f) continue;
+        ctx.fillStyle = '#6a4526';
+        ctx.fillRect(fx, fy, 1, 1);
+        const cropColor = f <= 2 ? '#7a9a3a' : f <= 4 ? '#8ec44a' : '#e8c84a';
+        ctx.fillStyle = cropColor;
+        for (let r = 1; r < TILE; r += 2) {
+          for (let px = 1; px < TILE - 1; px += 2) {
+            if ((px + r + fx + fy) % 3 || f >= 3) ctx.fillRect(fx + px / TILE, fy + r / TILE, 1 / TILE, 1 / TILE);
+          }
+        }
+      }
+    }
 
     // 火焰(动态闪烁)
     if (w.burning.size) {

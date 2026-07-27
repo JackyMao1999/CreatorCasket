@@ -6,6 +6,7 @@ const Sound = {
   _masterGain: null,
   _muted: false,
   _volume: 0.5,
+  _noiseBuf: null,
 
   init() {
     try {
@@ -13,47 +14,55 @@ const Sound = {
       this._masterGain = this.ctx.createGain();
       this._masterGain.gain.value = this._volume;
       this._masterGain.connect(this.ctx.destination);
+      this._initNoiseBuf();
     } catch (e) { /* 无音频支持 */ }
   },
 
-  // 确保上下文运行(某些浏览器需要用户交互后启动)
-  resume() {
-    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
-  },
-
-  // 白噪声缓冲(用于爆炸/火焰音效)
-  _noiseBuf(duration) {
+  _initNoiseBuf() {
     const sr = this.ctx.sampleRate;
-    const len = (sr * duration) | 0;
+    const len = sr * 2;
     const buf = this.ctx.createBuffer(1, len, sr);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    return buf;
+    this._noiseBuf = buf;
   },
 
-  _playTone(freq, dur, type, vol, rampDown) {
+  mute() { this._muted = true; },
+  unmute() { this._muted = false; },
+  isMuted() { return this._muted; },
+  setVolume(v) { this._volume = Math.max(0, Math.min(1, v)); if (this._masterGain) this._masterGain.gain.value = v; },
+  getVolume() { return this._volume; },
+
+  // 确保上下文运行(某些浏览器需要用户交互后启动)
+  resume() {
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+  },
+
+  _playTone(freq, dur, type, vol, rampDown, when) {
     if (!this.ctx || this._muted) return;
     this.resume();
+    const t = when || this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
     osc.type = type || 'square';
     osc.frequency.value = freq;
-    g.gain.setValueAtTime(vol * this._volume, this.ctx.currentTime);
-    if (rampDown !== false) g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+    g.gain.setValueAtTime(vol * this._volume, t);
+    if (rampDown !== false) g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     osc.connect(g);
     g.connect(this._masterGain);
-    osc.start();
-    osc.stop(this.ctx.currentTime + dur);
+    osc.start(t);
+    osc.stop(t + dur);
   },
 
-  _playNoise(dur, vol, filterFreq) {
+  _playNoise(dur, vol, filterFreq, when) {
     if (!this.ctx || this._muted) return;
     this.resume();
+    const t = when || this.ctx.currentTime;
     const src = this.ctx.createBufferSource();
-    src.buffer = this._noiseBuf(dur);
+    src.buffer = this._noiseBuf;
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(vol * this._volume, this.ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+    g.gain.setValueAtTime(vol * this._volume, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     if (filterFreq) {
       const f = this.ctx.createBiquadFilter();
       f.type = 'bandpass';
@@ -62,34 +71,33 @@ const Sound = {
       src.connect(f); f.connect(g);
     } else { src.connect(g); }
     g.connect(this._masterGain);
-    src.start();
+    src.start(t, Math.random() * 0.8);
+  },
+
+  _seqTone(freqs, vols, dur, type) {
+    if (!this.ctx || this._muted) return;
+    this.resume();
+    let t = this.ctx.currentTime;
+    for (let i = 0; i < freqs.length; i++) {
+      this._playTone(freqs[i], dur[i] || dur, type, vols[i] || 0.2, true, t);
+      t += dur[i] || dur;
+    }
   },
 
   /* ---- 具体音效 ---- */
   click()    { this._playTone(800, 0.06, 'square', 0.15); },
   hit()      { this._playTone(120, 0.1, 'sawtooth', 0.25); },
   explosion(){ this._playNoise(0.4, 0.6); this._playTone(60, 0.35, 'sawtooth', 0.4); },
-  fire()     { this._playNoise(0.15, 0.18, 2000); },
-  build()    { this._playTone(440, 0.08, 'square', 0.2);
-               setTimeout(() => this._playTone(660, 0.08, 'square', 0.2), 80);
-               setTimeout(() => this._playTone(880, 0.12, 'square', 0.2), 160); },
-  war()      { this._playTone(200, 0.3, 'sawtooth', 0.3);
-               setTimeout(() => this._playTone(150, 0.3, 'sawtooth', 0.3), 200); },
-  found()    { this._playTone(523, 0.1, 'triangle', 0.18);
-               setTimeout(() => this._playTone(659, 0.1, 'triangle', 0.18), 100);
-               setTimeout(() => this._playTone(784, 0.15, 'triangle', 0.18), 200); },
-  death()    { this._playTone(300, 0.15, 'triangle', 0.2);
-               setTimeout(() => this._playTone(200, 0.2, 'triangle', 0.15), 100); },
-  thunder()  { this._playNoise(0.3, 0.5, 400);
-               this._playTone(50, 0.25, 'sawtooth', 0.35); },
+  build()    { this._seqTone([440, 660, 880], [0.2, 0.2, 0.2], 0.08, 'square'); },
+  war()      { this._seqTone([200, 150], [0.3, 0.3], 0.3, 'sawtooth'); },
+  found()    { this._seqTone([523, 659, 784], [0.18, 0.18, 0.18], 0.1, 'triangle'); },
+  death()    { this._seqTone([300, 200], [0.2, 0.15], 0.15, 'triangle'); },
+  thunder()  { this._playNoise(0.3, 0.5, 400); this._playTone(50, 0.25, 'sawtooth', 0.35); },
   water()    { this._playNoise(0.08, 0.1, 6000); },
-  erupt()    { this._playNoise(0.5, 0.5);
-               this._playTone(40, 0.4, 'sawtooth', 0.45); },
+  erupt()    { this._playNoise(0.5, 0.5); this._playTone(40, 0.4, 'sawtooth', 0.45); },
   quake()    { this._playNoise(0.6, 0.4, 100); this._playTone(30, 0.5, 'sawtooth', 0.35); },
   plague()   { this._playTone(60, 0.4, 'sawtooth', 0.15); },
-  bless()    { this._playTone(1047, 0.15, 'sine', 0.12);
-               setTimeout(() => this._playTone(1319, 0.2, 'sine', 0.12), 120); },
+  bless()    { this._seqTone([1047, 1319], [0.12, 0.2], 0.12, 'sine'); },
   rain()     { this._playNoise(0.6, 0.08, 8000); },
-  rebel()    { this._playTone(150, 0.2, 'sawtooth', 0.3);
-               setTimeout(() => this._playTone(100, 0.25, 'sawtooth', 0.35), 200); },
+  rebel()    { this._seqTone([150, 100], [0.3, 0.35], 0.2, 'sawtooth'); },
 };

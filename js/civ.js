@@ -50,10 +50,10 @@ const NameGen = {
 };
 
 /* ---------- 叛军名称 ---------- */
-function generateRebelName(race) {
+function generateRebelName(race, rng) {
   const pre = ['暴风', '自由', '反抗', '赤色', '黎明', '铁拳', '暗影', '烈焰', '苍月', '血旗', '破晓'];
   const suf = ['反抗军', '自由军', '起义军', '解放阵线', '独立军', '同盟', '护民团'];
-  return pre[(Math.random() * pre.length) | 0] + suf[(Math.random() * suf.length) | 0];
+  return pre[(rng() * pre.length) | 0] + suf[(rng() * suf.length) | 0];
 }
 
 /* ---------- 敌对判定 ---------- */
@@ -167,7 +167,7 @@ class Unit {
     const k = this.kingdom ? game.kingdomById(this.kingdom) : null;
     if (k && this.id === k.leaderId) {
       const heir = game.units.find(u => u.village && game.villageById(u.village)?.kingdom === k.id && u.adult && !u.dead && u.id !== this.id);
-      if (heir) { heir.leader = true; heir.trait = pickTrait(); k.leaderId = heir.id;
+      if (heir) { heir.leader = true; heir.trait = pickTrait(game.world.rng); k.leaderId = heir.id;
         game.logEvent('kingdom', `👑 「${k.name}」的领袖「${this.name}」战死了，「${heir.name}」继位`, k.color);
       } else { k.leaderId = 0; }
     }
@@ -404,6 +404,10 @@ class Unit {
           if (this.atkCd <= 0) {
             this.atkCd = wpn.cd;
             let dmg = this.def.dmg * wpn.dmgMul * (this.bless > 0 ? 1.6 : 1) * (0.7 + Math.random() * 0.6);
+            // 领袖特质
+            const trait = getLeaderTrait(game, kingdom);
+            if (trait && trait.atkMul) dmg *= trait.atkMul;
+            if (trait && trait.special && (enemy.race === 'demon' || enemy.race === 'dragon')) dmg *= 2.0;
             // 兽人嗜血: HP < 50% 时 +20% 伤害
             if (this.race === 'orc' && this.hp < this.maxHp * 0.5) dmg *= 1.2;
             enemy.damage(game, dmg, this);
@@ -579,7 +583,8 @@ class Unit {
       if (site) {
         const d2 = (site.x - this.x) ** 2 + (site.y - this.y) ** 2;
         if (d2 < 2.6) {
-          site.progress += 0.025;
+          const trait = getLeaderTrait(game, kingdom);
+          site.progress += 0.025 * (trait && trait.buildMul ? trait.buildMul : 1);
           if (Math.random() < 0.15) game.addParticle(site.x + (Math.random() - .5), site.y - Math.random() * .5, 0, -0.05, 15, '#d8c890', 1);
           if (site.progress >= 1) { completeBuilding(game, village, site); Sound.build(); }
         } else this.moveToward(game, site.x, site.y, 1);
@@ -593,7 +598,8 @@ class Unit {
     if (site && this.adult && this.job === 'none') {
       const d2 = (site.x - this.x) ** 2 + (site.y - this.y) ** 2;
       if (d2 < 2.6) {
-        site.progress += 0.012;
+        const trait = getLeaderTrait(game, kingdom);
+        site.progress += 0.012 * (trait && trait.buildMul ? trait.buildMul : 1);
         if (Math.random() < 0.1) game.addParticle(site.x + (Math.random() - .5), site.y - Math.random() * .5, 0, -0.05, 15, '#d8c890', 1);
         if (site.progress >= 1) { completeBuilding(game, village, site); Sound.build(); }
       } else this.moveToward(game, site.x, site.y, 1);
@@ -637,6 +643,7 @@ class Village {
     this.zoneDirty = true;
     this.tick = 0;
     this.dead = false;
+    this.units = [];
   }
 
   get color() { return '#fff'; }
@@ -668,7 +675,6 @@ class Village {
         s++;
         if (s > 5) { s = 1; this.food += 7; }
         w.farm[fi] = s;
-        w.overlayDirty = true;
       }
     }
 
@@ -688,9 +694,8 @@ class Village {
       // 饥饿: 没食物且超生
       if (this.food < 5 && this.pop > cap && !game.settings.worldLaws?.noHunger) {
         // 有人挨饿 -> 概率死亡
-        if (Math.random() < 0.1) {
-          const victim = game.units.find(u => u.village === this.id);
-          if (victim) victim.kill(game);
+        if (Math.random() < 0.1 && this.units.length) {
+          this.units[0].kill(game);
         }
       }
 
@@ -698,13 +703,15 @@ class Village {
       const houses = this.buildings.filter(b => b.type === 'house').length;
       const farms = this.buildings.filter(b => b.type === 'farm').length;
       const queued = this.buildings.some(b => b.progress < 1);
+      const ktrait = getLeaderTrait(game, game.kingdomById(this.kingdom));
+      const woodSave = ktrait && ktrait.woodSave ? ktrait.woodSave : 1;
       if (!queued && this.pop >= cap - 1 && houses < this.maxHouses()) {
-        if (this.wood >= 3) { this.wood -= 3;
+        if (this.wood >= Math.ceil(3 * woodSave)) { this.wood -= Math.ceil(3 * woodSave);
         const spot = this.findBuildSpot(game, 2);
         if (spot) this.buildings.push({ type: 'house', x: spot.x, y: spot.y, hp: 60, maxHp: 60, progress: 0, village: this.id });
         }
       } else if (!queued && farms < Math.max(1, (houses / 2) | 0)) {
-        if (this.wood >= 1) { this.wood -= 1;
+        if (this.wood >= Math.ceil(1 * woodSave)) { this.wood -= Math.ceil(1 * woodSave);
         const spot = this.findBuildSpot(game, 2, true);
         if (spot) this.buildings.push({ type: 'farm', x: spot.x, y: spot.y, hp: 30, maxHp: 30, progress: 0, village: this.id });
         }
@@ -717,8 +724,8 @@ class Village {
       }
 
       // 派出开拓者
-      if (this.pop >= cap && cap >= 10 && Math.random() < 0.06 && game.villages.length < 40) {
-        const settler = game.units.find(u => u.village === this.id && u.adult && u.job === 'none');
+      if (this.pop >= cap && cap >= 10 && game.world.rng() < (ktrait && ktrait.settlerRate ? ktrait.settlerRate : 0.06) && game.villages.length < 40) {
+        const settler = this.units.find(u => u.adult && u.job === 'none');
         if (settler) {
           const a = Math.random() * Math.PI * 2, d = 15 + Math.random() * 20;
           const nx = Math.round(this.cx + Math.cos(a) * d), ny = Math.round(this.cy + Math.sin(a) * d);
@@ -744,9 +751,9 @@ class Village {
         }
       }
       // 造船
-      if (this.wood >= 5) {
-        const boater = game.units.find(u => u.village === this.id && u.adult && u.job !== 'warrior' && !u.hasBoat);
-        if (boater) { this.wood -= 5; boater.hasBoat = true; Sound.build(); }
+      if (this.wood >= Math.ceil(5 * woodSave)) {
+        const boater = this.units.find(u => u.adult && u.job !== 'warrior' && !u.hasBoat);
+        if (boater) { this.wood -= Math.ceil(5 * woodSave); boater.hasBoat = true; Sound.build(); }
       }
       // 采矿
       if ((this.gold < 60 || this.stone < 40) && Math.random() < 0.2) {
@@ -762,18 +769,19 @@ class Village {
       }
       // 职业分配: 根据村庄需求自动指派专业工种
       const jobCounts = { builder: 0, lumberjack: 0, miner: 0, priest: 0, warrior: 0, trader: 0 };
-      for (const u of game.units) {
-        if (u.village === this.id && u.adult && u.job !== 'settler') {
+      for (const u of this.units) {
+        if (u.adult && u.job !== 'settler') {
           jobCounts[u.job] = (jobCounts[u.job] || 0) + 1;
         }
       }
       const hasForest = (() => { for (let dy = -this.radius; dy <= this.radius; dy += 2) for (let dx = -this.radius; dx <= this.radius; dx += 2) { const tx = this.cx + dx, ty = this.cy + dy; if (w.inB(tx, ty) && w.tiles[w.idx(tx, ty)] === T.FOREST) return true; } return false; })();
       const hasOre = (() => { for (let dy = -this.radius; dy <= this.radius; dy += 2) for (let dx = -this.radius; dx <= this.radius; dx += 2) { const tx = this.cx + dx, ty = this.cy + dy; if (w.inB(tx, ty) && w.resource[w.idx(tx, ty)]) return true; } return false; })();
       const hasQueue = this.buildings.some(b => b.progress < 1);
-      const injuredCount = game.units.filter(u => u.village === this.id && u.hp < u.maxHp * 0.6).length;
-      const idleCiv = game.units.find(u => u.village === this.id && u.adult && u.job === 'none');
+      const injuredCount = this.units.filter(u => u.hp < u.maxHp * 0.6).length;
+      const idleCiv = this.units.find(u => u.adult && u.job === 'none');
       // 商人: 有贸易路线则指派1人
-      if (idleCiv && this.tradeRoutes.length && jobCounts.trader < 1) idleCiv.job = 'trader';
+      if (idleCiv && this.tradeRoutes.length && jobCounts.trader < 1
+        && game.world.rng() < (ktrait && ktrait.traderChance ? ktrait.traderChance / 0.3 * 0.5 : 0.5)) idleCiv.job = 'trader';
       else if (idleCiv && hasQueue && jobCounts.builder < 2) idleCiv.job = 'builder';
       else if (idleCiv && hasForest && this.wood < 40 && jobCounts.lumberjack < 1) idleCiv.job = 'lumberjack';
       else if (idleCiv && hasOre && (this.gold < 30 || this.stone < 20 || this.iron < 10) && jobCounts.miner < 1) idleCiv.job = 'miner';
@@ -792,16 +800,15 @@ class Village {
 
   tickUnrest(game) {
     const cap = this.capacity();
-    let hasPlague = false;
-    for (const u of game.units) {
-      if (u.village === this.id && u.plague > 0) { hasPlague = true; break; }
-    }
+    const hasPlague = this.units.some(u => u.plague > 0);
     let delta = -0.35;
     if (this.food < this.pop) delta += 1.8;
     if (this.pop > cap) delta += 1.2;
     if (hasPlague) delta += 2.5;
     const kingdom = game.kingdomById(this.kingdom);
     if (kingdom && kingdomAtWar(game, kingdom)) delta += 0.6;
+    const ktrait = getLeaderTrait(game, kingdom);
+    if (ktrait && ktrait.unrestGain) delta += ktrait.unrestGain;
     this.unrest = Math.max(0, Math.min(100, this.unrest + delta));
   }
 
@@ -811,10 +818,10 @@ class Village {
     if (!kingdom || kingdom.villages.length < 2) return;
     if (this.dead) return;
     // 30% 概率触发叛变
-    if (Math.random() > 0.3 * (this.unrest / 100)) return;
+    if (game.world.rng() > 0.3 * (this.unrest / 100)) return;
 
-    const newKingdom = new Kingdom(this.race);
-    newKingdom.name = generateRebelName(kingdom.race);
+    const newKingdom = new Kingdom(this.race, game.world.rng);
+    newKingdom.name = generateRebelName(kingdom.race, game.world.rng);
     game.kingdoms.push(newKingdom);
 
     // 将该村划入叛军王国
@@ -842,7 +849,7 @@ class Village {
       const v = game.villageById(vid);
       if (!v || v.kingdom !== kingdom.id) continue;
       const d = Math.hypot(v.cx - this.cx, v.cy - this.cy);
-      if (d < 35 && v.unrest >= 60 && Math.random() < 0.45) {
+      if (d < 35 && v.unrest >= 60 && game.world.rng() < 0.45) {
         kingdom.villages = kingdom.villages.filter(id => id !== vid);
         newKingdom.villages.push(vid);
         v.kingdom = newKingdom.id;
@@ -1048,7 +1055,7 @@ function layRoad(game, x0, y0, x1, y1) {
 /* ---------- 王国 ---------- */
 let _kingdomId = 1;
 class Kingdom {
-  constructor(race) {
+  constructor(race, rng) {
     this.id = _kingdomId++;
     this.name = NameGen.kingdom(race);
     this.race = race;
@@ -1057,7 +1064,7 @@ class Kingdom {
     this.wars = new Set();
     this.allies = new Set();
     this.relations = new Map();   // kingId→value(-100~+100)
-    this.ideology = pickIdeology();
+    this.ideology = pickIdeology(rng);
     this.leaderId = 0;
   }
 }
@@ -1070,7 +1077,7 @@ const IDEOLOGIES = [
   { id:'republic',  name:'🏛️ 共和制', warMul:0.5,  unrestDecay:1.5, tradeMul:1.5, peaceChance:0.14 },
   { id:'dragon',    name:'🐉 龙血帝国', warMul:1.0, unrestDecay:0.8, hpMul:1.15 },
 ];
-function pickIdeology() { return IDEOLOGIES[Math.random() < 0.05 ? 4 : (Math.random() * 4) | 0]; }
+function pickIdeology(rng) { return IDEOLOGIES[(rng ? rng() : Math.random()) < 0.05 ? 4 : ((rng ? rng() : Math.random()) * 4) | 0]; }
 
 /* 领袖特质 */
 const LEADER_TRAITS = [
@@ -1081,7 +1088,7 @@ const LEADER_TRAITS = [
   { id:'visionary',  name:'🔭 远见者',     settlerRate:0.12, traderChance:0.3 },
   { id:'dragonbane', name:'🗡️ 屠龙者',    atkMul:2.0, special:true },
 ];
-function pickTrait() { return LEADER_TRAITS[(Math.random() * 6) | 0]; }
+function pickTrait(rng) { return LEADER_TRAITS[((rng ? rng() : Math.random()) * 6) | 0]; }
 
 /* ---------- 全局文明函数 ---------- */
 function nearestVillage(game, x, y, maxD, race) {
@@ -1119,7 +1126,7 @@ function tryFoundVillage(game, unit) {
     if (nv) kingdom = game.kingdomById(nv.kingdom);
   }
   if (!kingdom) {
-    kingdom = new Kingdom(unit.race);
+    kingdom = new Kingdom(unit.race, game.world.rng);
     game.kingdoms.push(kingdom);
     game.logEvent('kingdom', `👑 ${RACES[unit.race].name}建立了「${kingdom.name}」!`, kingdom.color);
     Sound.found();
@@ -1137,7 +1144,7 @@ function tryFoundVillage(game, unit) {
   // 为王国创建首个领袖
   if (!kingdom.leaderId) {
     const leader = game.units.find(u => u.village === v.id && u.adult && !u.leader);
-    if (leader) { leader.leader = true; leader.trait = pickTrait(); kingdom.leaderId = leader.id; }
+    if (leader) { leader.leader = true; leader.trait = pickTrait(game.world.rng); kingdom.leaderId = leader.id; }
   }
   return true;
 }
@@ -1172,6 +1179,14 @@ function kingdomAtWar(game, kingdom) {
     if (ally && ally.wars.size > 0) return true;
   }
   return false;
+}
+
+/* 获取王国领袖特质 */
+function getLeaderTrait(game, kingdom) {
+  if (!kingdom || !kingdom.leaderId) return null;
+  const leader = game.units.find(u => u.id === kingdom.leaderId);
+  if (!leader || !leader.trait) return null;
+  return leader.trait;
 }
 
 /* 王国间战争判定 & 同盟外交 (每150 tick) */
@@ -1212,8 +1227,11 @@ function kingdomsTick(game) {
       // --- 战争宣言/议和 ---
       if (minD < 50 || (orcWar && minD < 80)) {
         if (!atWar) {
-          const warChance = (orcWar ? 1.0 : 0.18) * ideologyA.warMul * ideologyB.warMul * (rel < -40 ? 1.5 : 1);
-          if (Math.random() < warChance && !game.settings.worldLaws?.noWar) {
+          const traitA = getLeaderTrait(game, A);
+          const traitB = getLeaderTrait(game, B);
+          const warChance = (orcWar ? 1.0 : 0.18) * ideologyA.warMul * ideologyB.warMul * (rel < -40 ? 1.5 : 1)
+            * (traitA && traitA.warRate ? traitA.warRate / 0.04 : 1) * (traitB && traitB.warRate ? traitB.warRate / 0.04 : 1);
+          if (game.world.rng() < warChance && !game.settings.worldLaws?.noWar) {
             A.wars.add(B.id); B.wars.add(A.id);
             game.logEvent('war', `⚔️ 「${A.name}」向「${B.name}」宣战!`, A.color);
             Sound.war();
@@ -1224,7 +1242,7 @@ function kingdomsTick(game) {
               game.logEvent('alliance', `💔 「${A.name}」背叛了与「${B.name}」的同盟！`);
             }
           }
-        } else if (!orcWar && Math.random() < (ideologyA.peaceChance || 0.12)) {
+        } else if (!orcWar && game.world.rng() < (ideologyA.peaceChance || 0.12)) {
           A.wars.delete(B.id); B.wars.delete(A.id);
           A.relations.set(B.id, Math.min(100, (A.relations.get(B.id) || 0) + 20));
           B.relations.set(A.id, Math.min(100, (B.relations.get(A.id) || 0) + 20));
@@ -1237,7 +1255,7 @@ function kingdomsTick(game) {
         const hasCommon = [...A.wars].some(w => B.wars.has(w));
         const sameRace = A.race === B.race && minD < 35;
         const chance = hasCommon ? 0.30 : (sameRace ? 0.20 : 0.08);
-        if (Math.random() < chance) {
+        if (game.world.rng() < chance) {
           A.allies.add(B.id); B.allies.add(A.id);
           game.logEvent('alliance', `🤝 「${A.name}」与「${B.name}」缔结了同盟！`);
         }
@@ -1246,7 +1264,7 @@ function kingdomsTick(game) {
       // --- 同盟瓦解 (无共同敌人且异族, 概率断交) ---
       if (A.allies.has(B.id)) {
         const hasCommon = [...A.wars].some(w => B.wars.has(w));
-        if (!hasCommon && A.race !== B.race && Math.random() < 0.15) {
+        if (!hasCommon && A.race !== B.race && game.world.rng() < 0.15) {
           A.allies.delete(B.id); B.allies.delete(B.id);
           game.logEvent('alliance', `💔 「${A.name}」与「${B.name}」的同盟破裂了`);
         }
@@ -1268,17 +1286,19 @@ function civTick(game) {
   for (const u of game.units) u.tick(game);
   // 清理死亡单位
   if (game.units.some(u => u.dead)) game.units = game.units.filter(u => !u.dead);
+  // 重建每村庄单位列表
+  for (const v of game.villages) v.units.length = 0;
+  for (const u of game.units) {
+    if (u.village) {
+      const v = game.villageById(u.village);
+      if (v) v.units.push(u);
+    }
+  }
   for (const v of game.villages) v.tickVillage(game);
   if (game.villages.some(v => v.dead)) game.villages = game.villages.filter(v => !v.dead);
   if (game.tick % 150 === 0) kingdomsTick(game);
   // 每60 tick统计人口
   if (game.tick % 60 === 0) {
-    for (const v of game.villages) v.pop = 0;
-    for (const u of game.units) {
-      if (u.village) {
-        const v = game.villageById(u.village);
-        if (v) v.pop++;
-      }
-    }
+    for (const v of game.villages) v.pop = v.units.length;
   }
 }
